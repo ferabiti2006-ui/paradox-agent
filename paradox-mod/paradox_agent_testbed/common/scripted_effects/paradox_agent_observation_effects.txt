@@ -32,7 +32,7 @@ paradox_agent_export_observation = {
 	export_resource_income_to_variable = { resource = alloys variable = paradox_agent_alloys_income }
 	export_resource_income_to_variable = { resource = unity variable = paradox_agent_unity_income }
 
-	log = "PARADOX_AGENT|COUNTRY|name=[This.GetName]|capital=[This.GetCapitalPlanetNameOrRandomPersistent]|pop_amount=[This.paradox_agent_pop_amount]|unemployed=[This.paradox_agent_unemployed]|colonies=[This.paradox_agent_colonies]|systems=[This.paradox_agent_systems]|empire_size=[This.paradox_agent_empire_size]|fleets=[This.paradox_agent_fleets]|ships=[This.paradox_agent_ships]|naval_capacity=[This.paradox_agent_naval_capacity]|naval_used=[This.paradox_agent_naval_used]|starbase_capacity=[This.paradox_agent_starbase_capacity]|starbases=[This.paradox_agent_starbases]|energy=[This.paradox_agent_energy]|energy_income=[This.paradox_agent_energy_income]|minerals=[This.paradox_agent_minerals]|minerals_income=[This.paradox_agent_minerals_income]|food=[This.paradox_agent_food]|food_income=[This.paradox_agent_food_income]|consumer_goods=[This.paradox_agent_consumer_goods]|consumer_goods_income=[This.paradox_agent_consumer_goods_income]|alloys=[This.paradox_agent_alloys]|alloys_income=[This.paradox_agent_alloys_income]|unity=[This.paradox_agent_unity]|unity_income=[This.paradox_agent_unity_income]|influence=[This.paradox_agent_influence]"
+	log = "PARADOX_AGENT|COUNTRY|name=\[This.GetName]|capital=\[This.GetCapitalPlanetNameOrRandomPersistent]|pop_amount=\[This.paradox_agent_pop_amount]|unemployed=\[This.paradox_agent_unemployed]|colonies=\[This.paradox_agent_colonies]|systems=\[This.paradox_agent_systems]|empire_size=\[This.paradox_agent_empire_size]|fleets=\[This.paradox_agent_fleets]|ships=\[This.paradox_agent_ships]|naval_capacity=\[This.paradox_agent_naval_capacity]|naval_used=\[This.paradox_agent_naval_used]|starbase_capacity=\[This.paradox_agent_starbase_capacity]|starbases=\[This.paradox_agent_starbases]|energy=\[This.paradox_agent_energy]|energy_income=\[This.paradox_agent_energy_income]|minerals=\[This.paradox_agent_minerals]|minerals_income=\[This.paradox_agent_minerals_income]|food=\[This.paradox_agent_food]|food_income=\[This.paradox_agent_food_income]|consumer_goods=\[This.paradox_agent_consumer_goods]|consumer_goods_income=\[This.paradox_agent_consumer_goods_income]|alloys=\[This.paradox_agent_alloys]|alloys_income=\[This.paradox_agent_alloys_income]|unity=\[This.paradox_agent_unity]|unity_income=\[This.paradox_agent_unity_income]|influence=\[This.paradox_agent_influence]"
 
 	# Research totals. Current technology names are not exposed generically by
 	# the scripting API and will be reconciled from saves in a later layer.
@@ -58,7 +58,7 @@ paradox_agent_export_observation = {
 		parameters = { area = engineering }
 		variable = paradox_agent_engineering_options
 	}
-	log = "PARADOX_AGENT|RESEARCH|physics_income=[This.paradox_agent_physics_income]|physics_stored=[This.paradox_agent_physics_stored]|physics_options=[This.paradox_agent_physics_options]|society_income=[This.paradox_agent_society_income]|society_stored=[This.paradox_agent_society_stored]|society_options=[This.paradox_agent_society_options]|engineering_income=[This.paradox_agent_engineering_income]|engineering_stored=[This.paradox_agent_engineering_stored]|engineering_options=[This.paradox_agent_engineering_options]|techs_researched=[This.paradox_agent_techs_researched]"
+	log = "PARADOX_AGENT|RESEARCH|physics_income=\[This.paradox_agent_physics_income]|physics_stored=\[This.paradox_agent_physics_stored]|physics_options=\[This.paradox_agent_physics_options]|society_income=\[This.paradox_agent_society_income]|society_stored=\[This.paradox_agent_society_stored]|society_options=\[This.paradox_agent_society_options]|engineering_income=\[This.paradox_agent_engineering_income]|engineering_stored=\[This.paradox_agent_engineering_stored]|engineering_options=\[This.paradox_agent_engineering_options]|techs_researched=\[This.paradox_agent_techs_researched]"
 
 	# Physical colonies only. The exists = planet guard excludes mobile colony
 	# carriers introduced for nomadic empires.
@@ -90,10 +90,10 @@ paradox_agent_export_observation = {
 			parameters = { type = any disabled = any in_construction = no }
 			variable = paradox_agent_buildings
 		}
-		export_trigger_value_to_variable = {
-			trigger = num_buildings
-			parameters = { type = any disabled = any in_construction = yes }
-			variable = paradox_agent_buildings_queued
+		set_variable = { which = paradox_agent_building_construction value = 0 }
+		if = {
+			limit = { has_building_construction = yes }
+			set_variable = { which = paradox_agent_building_construction value = 1 }
 		}
 		export_trigger_value_to_variable = {
 			trigger = num_districts
@@ -121,7 +121,7 @@ paradox_agent_export_observation = {
 			variable = paradox_agent_district_farming
 		}
 
-		log = "PARADOX_AGENT|PLANET|name=[This.GetNamePersistent]|system=[This.GetStarName]|class=[This.GetClassName]|capital=[This.paradox_agent_is_capital]|size=[This.paradox_agent_size]|pop_amount=[This.paradox_agent_pop_amount]|unemployed=[This.paradox_agent_unemployed]|free_jobs=[This.paradox_agent_free_jobs]|free_housing=[This.paradox_agent_free_housing]|free_amenities=[This.paradox_agent_free_amenities]|stability=[This.paradox_agent_stability]|crime=[This.paradox_agent_crime]|districts=[This.paradox_agent_districts]|district_city=[This.paradox_agent_district_city]|district_generator=[This.paradox_agent_district_generator]|district_mining=[This.paradox_agent_district_mining]|district_farming=[This.paradox_agent_district_farming]|free_district_slots=[This.paradox_agent_free_district_slots]|buildings=[This.paradox_agent_buildings]|buildings_queued=[This.paradox_agent_buildings_queued]|free_building_slots=[This.paradox_agent_free_building_slots]"
+		log = "PARADOX_AGENT|PLANET|name=\[This.GetNamePersistent]|system=\[This.GetStarName]|class=\[This.GetClassName]|capital=\[This.paradox_agent_is_capital]|size=\[This.paradox_agent_size]|pop_amount=\[This.paradox_agent_pop_amount]|unemployed=\[This.paradox_agent_unemployed]|free_jobs=\[This.paradox_agent_free_jobs]|free_housing=\[This.paradox_agent_free_housing]|free_amenities=\[This.paradox_agent_free_amenities]|stability=\[This.paradox_agent_stability]|crime=\[This.paradox_agent_crime]|districts=\[This.paradox_agent_districts]|district_city=\[This.paradox_agent_district_city]|district_generator=\[This.paradox_agent_district_generator]|district_mining=\[This.paradox_agent_district_mining]|district_farming=\[This.paradox_agent_district_farming]|free_district_slots=\[This.paradox_agent_free_district_slots]|buildings=\[This.paradox_agent_buildings]|building_construction=\[This.paradox_agent_building_construction]|free_building_slots=\[This.paradox_agent_free_building_slots]"
 	}
 
 	# Fleets include military and civilian fleets. Their name, location, power,
@@ -130,7 +130,7 @@ paradox_agent_export_observation = {
 		export_trigger_value_to_variable = { trigger = fleet_power variable = paradox_agent_fleet_power }
 		export_trigger_value_to_variable = { trigger = fleet_size variable = paradox_agent_fleet_size }
 		export_trigger_value_to_variable = { trigger = num_ships variable = paradox_agent_fleet_ships }
-		log = "PARADOX_AGENT|FLEET|name=[This.GetNamePersistent]|system=[This.GetStarNamePersistent]|power=[This.paradox_agent_fleet_power]|fleet_size=[This.paradox_agent_fleet_size]|ships=[This.paradox_agent_fleet_ships]"
+		log = "PARADOX_AGENT|FLEET|name=\[This.GetNamePersistent]|system=\[This.GetStarNamePersistent]|power=\[This.paradox_agent_fleet_power]|fleet_size=\[This.paradox_agent_fleet_size]|ships=\[This.paradox_agent_fleet_ships]"
 	}
 
 	# Built and construction-inclusive starbase totals reveal whether modules or
@@ -156,6 +156,6 @@ paradox_agent_export_observation = {
 			parameters = { include_being_constructed = yes }
 			variable = paradox_agent_starbase_buildings_with_construction
 		}
-		log = "PARADOX_AGENT|STARBASE|name=[This.GetNamePersistent]|system=[This.GetStarNamePersistent]|class=[This.GetShipSizeName]|modules=[This.paradox_agent_modules]|modules_with_construction=[This.paradox_agent_modules_with_construction]|buildings=[This.paradox_agent_starbase_buildings]|buildings_with_construction=[This.paradox_agent_starbase_buildings_with_construction]"
+		log = "PARADOX_AGENT|STARBASE|name=\[This.GetNamePersistent]|system=\[This.GetStarNamePersistent]|class=\[This.GetShipSizeName]|modules=\[This.paradox_agent_modules]|modules_with_construction=\[This.paradox_agent_modules_with_construction]|buildings=\[This.paradox_agent_starbase_buildings]|buildings_with_construction=\[This.paradox_agent_starbase_buildings_with_construction]"
 	}
 }
