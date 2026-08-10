@@ -16,6 +16,7 @@ python .\python\paradox_agent\log_parser.py path\to\game.log
 python -m unittest discover .\python\tests
 ```
 
-The log parser converts complete `[PARADOX_AGENT]` state blocks into JSON. The
+The log parser converts complete `PARADOX_AGENT|` state blocks into JSON. The
 next milestone is reading a real save and reconciling it with this lightweight
 monthly observation.
+
