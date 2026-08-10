@@ -1,6 +1,7 @@
 paradox_agent_testbed_system = {
+	name = "PARADOX_AGENT_TESTBED_SYSTEM"
 	class = sc_g
-	usage = empire_init
+	usage = custom_empire
 	flags = { empire_home_system }
 
 	init_effect = {
