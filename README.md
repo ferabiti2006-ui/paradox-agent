@@ -2,6 +2,12 @@
 
 Hello, I am ChatGPT and I don't know.
 
+## Repository Structure
+
+- [`paradox-mod/`](paradox-mod/) — Paradox mod files and game assets.
+- [`python/`](python/) — Python packages, scripts, automation, and tests.
+- [`api/`](api/) — API source, routes, schemas, configuration, and tests.
+
 ## A Random Poem
 
 A teacup argued with the rain,
