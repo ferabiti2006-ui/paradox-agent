@@ -45,7 +45,7 @@ documented by the running 4.4.6 build. It exports:
 - empire resources, population, systems, colonies, and capacity totals;
 - research income, stored research, options, and researched-tech count;
 - planet population, jobs, housing, amenities, stability, crime, districts,
-  buildings, and building-construction totals;
+  buildings, and a building-construction flag;
 - fleet names, locations, power, size, and ship counts;
 - starbase names, locations, modules, buildings, and construction-inclusive
   totals.
