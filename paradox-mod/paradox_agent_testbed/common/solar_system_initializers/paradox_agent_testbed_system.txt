@@ -1,7 +1,8 @@
 paradox_agent_testbed_system = {
 	name = "PARADOX_AGENT_TESTBED_SYSTEM"
 	class = sc_g
-	usage = custom_empire
+	# Static scenarios assign ordinary empires to empire_init systems.
+	usage = empire_init
 	flags = { empire_home_system }
 
 	init_effect = {
