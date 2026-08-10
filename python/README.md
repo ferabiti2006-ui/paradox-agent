@@ -16,7 +16,9 @@ python .\python\paradox_agent\log_parser.py path\to\game.log
 python -m unittest discover .\python\tests
 ```
 
-The log parser converts complete `PARADOX_AGENT|` state blocks into JSON. The
-next milestone is reading a real save and reconciling it with this lightweight
-monthly observation.
-
+The log parser converts complete `PARADOX_AGENT|` state blocks into JSON.
+Schema 2 contains country economy/capacity totals, research totals, physical
+colonies, fleets, and starbases. Exact current technology names, individual
+building types, and exact construction queue items are not generically exposed
+by Stellaris scripting; a later save reader will reconcile those details with
+this lightweight monthly observation.
