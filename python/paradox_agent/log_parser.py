@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 
-MARKER = "[PARADOX_AGENT]|"
+MARKER = "PARADOX_AGENT|"
 
 
 def _value(text: str) -> str | int | float:
