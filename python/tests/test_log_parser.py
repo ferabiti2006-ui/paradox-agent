@@ -13,7 +13,7 @@ class ParseStateBlocksTests(unittest.TestCase):
             "PARADOX_AGENT|COUNTRY|name=Test Empire|colonies=1|energy=1000|energy_income=12.5\n",
             "PARADOX_AGENT|RESEARCH|physics_income=20.5|techs_researched=8\n",
             "PARADOX_AGENT|PLANET|name=Axiom Prime|pop_amount=2800|stability=61\n",
-            "PARADOX_AGENT|FLEET|name=1st Fleet|system=Axiom|power=145|ships=3\n",
+            "PARADOX_AGENT|FLEET|name=1st Fleet|system=Axiom|civilian=0|power=145|ships=3\n",
             "PARADOX_AGENT|STARBASE|name=Axiom Station|modules=1|modules_with_construction=2\n",
             "PARADOX_AGENT|STATE_END|date=2200.02.01\n",
         ]
@@ -28,6 +28,7 @@ class ParseStateBlocksTests(unittest.TestCase):
         self.assertEqual(snapshots[0]["planets"][0]["name"], "Axiom Prime")
         self.assertEqual(snapshots[0]["research"]["physics_income"], 20.5)
         self.assertEqual(snapshots[0]["fleets"][0]["power"], 145)
+        self.assertEqual(snapshots[0]["fleets"][0]["civilian"], 0)
         self.assertEqual(snapshots[0]["starbases"][0]["modules_with_construction"], 2)
 
     def test_defaults_old_snapshots_to_schema_one(self) -> None:
