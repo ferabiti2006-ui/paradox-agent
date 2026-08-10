@@ -33,10 +33,10 @@ descriptor. It never edits the vanilla game installation.
 3. Select the **Paradox Agent Testbed (1 System)** galaxy size.
 4. Start the game and allow at least one month to pass.
 5. Inspect `Documents\Paradox Interactive\Stellaris\logs\game.log`.
-6. Search for `[PARADOX_AGENT]`.
+6. Search for `PARADOX_AGENT|`.
 
-Expected markers include `BRIDGE_READY`, `STATE_BEGIN`, `COUNTRY`, `PLANET`,
-and `STATE_END`.
+Expected markers include `BRIDGE_READY`, `STATE_BEGIN`, `COUNTRY`, and
+`STATE_END`.
 
 ## Important limitation
 
