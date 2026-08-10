@@ -1,0 +1,161 @@
+# Observation export built entirely from effects, triggers, iterators, and
+# localization commands documented by Stellaris 4.4.6 itself under
+# logs/script_documentation. It reads state only and never changes gameplay.
+
+paradox_agent_export_observation = {
+	# Empire totals.
+	export_trigger_value_to_variable = { trigger = pop_amount variable = paradox_agent_pop_amount }
+	export_trigger_value_to_variable = { trigger = num_unemployed variable = paradox_agent_unemployed }
+	export_trigger_value_to_variable = { trigger = num_owned_colonies variable = paradox_agent_colonies }
+	export_trigger_value_to_variable = { trigger = controlled_systems variable = paradox_agent_systems }
+	export_trigger_value_to_variable = { trigger = empire_size variable = paradox_agent_empire_size }
+	export_trigger_value_to_variable = { trigger = num_fleets variable = paradox_agent_fleets }
+	export_trigger_value_to_variable = { trigger = num_ships variable = paradox_agent_ships }
+	export_trigger_value_to_variable = { trigger = max_naval_capacity variable = paradox_agent_naval_capacity }
+	export_trigger_value_to_variable = { trigger = used_naval_capacity_integer variable = paradox_agent_naval_used }
+	export_trigger_value_to_variable = { trigger = max_starbase_capacity variable = paradox_agent_starbase_capacity }
+	export_trigger_value_to_variable = { trigger = num_starbases variable = paradox_agent_starbases }
+
+	# Resource stockpiles and net monthly income.
+	export_resource_stockpile_to_variable = { resource = energy variable = paradox_agent_energy }
+	export_resource_stockpile_to_variable = { resource = minerals variable = paradox_agent_minerals }
+	export_resource_stockpile_to_variable = { resource = food variable = paradox_agent_food }
+	export_resource_stockpile_to_variable = { resource = consumer_goods variable = paradox_agent_consumer_goods }
+	export_resource_stockpile_to_variable = { resource = alloys variable = paradox_agent_alloys }
+	export_resource_stockpile_to_variable = { resource = unity variable = paradox_agent_unity }
+	export_resource_stockpile_to_variable = { resource = influence variable = paradox_agent_influence }
+
+	export_resource_income_to_variable = { resource = energy variable = paradox_agent_energy_income }
+	export_resource_income_to_variable = { resource = minerals variable = paradox_agent_minerals_income }
+	export_resource_income_to_variable = { resource = food variable = paradox_agent_food_income }
+	export_resource_income_to_variable = { resource = consumer_goods variable = paradox_agent_consumer_goods_income }
+	export_resource_income_to_variable = { resource = alloys variable = paradox_agent_alloys_income }
+	export_resource_income_to_variable = { resource = unity variable = paradox_agent_unity_income }
+
+	log = "PARADOX_AGENT|COUNTRY|name=[This.GetName]|capital=[This.GetCapitalPlanetNameOrRandomPersistent]|pop_amount=[This.paradox_agent_pop_amount]|unemployed=[This.paradox_agent_unemployed]|colonies=[This.paradox_agent_colonies]|systems=[This.paradox_agent_systems]|empire_size=[This.paradox_agent_empire_size]|fleets=[This.paradox_agent_fleets]|ships=[This.paradox_agent_ships]|naval_capacity=[This.paradox_agent_naval_capacity]|naval_used=[This.paradox_agent_naval_used]|starbase_capacity=[This.paradox_agent_starbase_capacity]|starbases=[This.paradox_agent_starbases]|energy=[This.paradox_agent_energy]|energy_income=[This.paradox_agent_energy_income]|minerals=[This.paradox_agent_minerals]|minerals_income=[This.paradox_agent_minerals_income]|food=[This.paradox_agent_food]|food_income=[This.paradox_agent_food_income]|consumer_goods=[This.paradox_agent_consumer_goods]|consumer_goods_income=[This.paradox_agent_consumer_goods_income]|alloys=[This.paradox_agent_alloys]|alloys_income=[This.paradox_agent_alloys_income]|unity=[This.paradox_agent_unity]|unity_income=[This.paradox_agent_unity_income]|influence=[This.paradox_agent_influence]"
+
+	# Research totals. Current technology names are not exposed generically by
+	# the scripting API and will be reconciled from saves in a later layer.
+	export_resource_income_to_variable = { resource = physics_research variable = paradox_agent_physics_income }
+	export_resource_income_to_variable = { resource = society_research variable = paradox_agent_society_income }
+	export_resource_income_to_variable = { resource = engineering_research variable = paradox_agent_engineering_income }
+	export_trigger_value_to_variable = { trigger = stored_physics_points variable = paradox_agent_physics_stored }
+	export_trigger_value_to_variable = { trigger = stored_society_points variable = paradox_agent_society_stored }
+	export_trigger_value_to_variable = { trigger = stored_engineering_points variable = paradox_agent_engineering_stored }
+	export_trigger_value_to_variable = { trigger = num_researched_techs variable = paradox_agent_techs_researched }
+	export_trigger_value_to_variable = {
+		trigger = count_tech_options
+		parameters = { area = physics }
+		variable = paradox_agent_physics_options
+	}
+	export_trigger_value_to_variable = {
+		trigger = count_tech_options
+		parameters = { area = society }
+		variable = paradox_agent_society_options
+	}
+	export_trigger_value_to_variable = {
+		trigger = count_tech_options
+		parameters = { area = engineering }
+		variable = paradox_agent_engineering_options
+	}
+	log = "PARADOX_AGENT|RESEARCH|physics_income=[This.paradox_agent_physics_income]|physics_stored=[This.paradox_agent_physics_stored]|physics_options=[This.paradox_agent_physics_options]|society_income=[This.paradox_agent_society_income]|society_stored=[This.paradox_agent_society_stored]|society_options=[This.paradox_agent_society_options]|engineering_income=[This.paradox_agent_engineering_income]|engineering_stored=[This.paradox_agent_engineering_stored]|engineering_options=[This.paradox_agent_engineering_options]|techs_researched=[This.paradox_agent_techs_researched]"
+
+	# Physical colonies only. The exists = planet guard excludes mobile colony
+	# carriers introduced for nomadic empires.
+	every_owned_colony = {
+		limit = {
+			exists = planet
+			is_colony = yes
+			is_under_colonization = no
+		}
+
+		set_variable = { which = paradox_agent_is_capital value = 0 }
+		if = {
+			limit = { is_capital = yes }
+			set_variable = { which = paradox_agent_is_capital value = 1 }
+		}
+
+		export_trigger_value_to_variable = { trigger = pop_amount variable = paradox_agent_pop_amount }
+		export_trigger_value_to_variable = { trigger = num_unemployed variable = paradox_agent_unemployed }
+		export_trigger_value_to_variable = { trigger = free_jobs variable = paradox_agent_free_jobs }
+		export_trigger_value_to_variable = { trigger = free_housing variable = paradox_agent_free_housing }
+		export_trigger_value_to_variable = { trigger = free_amenities variable = paradox_agent_free_amenities }
+		export_trigger_value_to_variable = { trigger = planet_stability variable = paradox_agent_stability }
+		export_trigger_value_to_variable = { trigger = planet_crime variable = paradox_agent_crime }
+		export_trigger_value_to_variable = { trigger = planet_size variable = paradox_agent_size }
+		export_trigger_value_to_variable = { trigger = free_district_slots variable = paradox_agent_free_district_slots }
+		export_trigger_value_to_variable = { trigger = free_building_slots variable = paradox_agent_free_building_slots }
+		export_trigger_value_to_variable = {
+			trigger = num_buildings
+			parameters = { type = any disabled = any in_construction = no }
+			variable = paradox_agent_buildings
+		}
+		export_trigger_value_to_variable = {
+			trigger = num_buildings
+			parameters = { type = any disabled = any in_construction = yes }
+			variable = paradox_agent_buildings_queued
+		}
+		export_trigger_value_to_variable = {
+			trigger = num_districts
+			parameters = { type = any }
+			variable = paradox_agent_districts
+		}
+		export_trigger_value_to_variable = {
+			trigger = num_districts
+			parameters = { type = district_city }
+			variable = paradox_agent_district_city
+		}
+		export_trigger_value_to_variable = {
+			trigger = num_districts
+			parameters = { type = district_generator }
+			variable = paradox_agent_district_generator
+		}
+		export_trigger_value_to_variable = {
+			trigger = num_districts
+			parameters = { type = district_mining }
+			variable = paradox_agent_district_mining
+		}
+		export_trigger_value_to_variable = {
+			trigger = num_districts
+			parameters = { type = district_farming }
+			variable = paradox_agent_district_farming
+		}
+
+		log = "PARADOX_AGENT|PLANET|name=[This.GetNamePersistent]|system=[This.GetStarName]|class=[This.GetClassName]|capital=[This.paradox_agent_is_capital]|size=[This.paradox_agent_size]|pop_amount=[This.paradox_agent_pop_amount]|unemployed=[This.paradox_agent_unemployed]|free_jobs=[This.paradox_agent_free_jobs]|free_housing=[This.paradox_agent_free_housing]|free_amenities=[This.paradox_agent_free_amenities]|stability=[This.paradox_agent_stability]|crime=[This.paradox_agent_crime]|districts=[This.paradox_agent_districts]|district_city=[This.paradox_agent_district_city]|district_generator=[This.paradox_agent_district_generator]|district_mining=[This.paradox_agent_district_mining]|district_farming=[This.paradox_agent_district_farming]|free_district_slots=[This.paradox_agent_free_district_slots]|buildings=[This.paradox_agent_buildings]|buildings_queued=[This.paradox_agent_buildings_queued]|free_building_slots=[This.paradox_agent_free_building_slots]"
+	}
+
+	# Fleets include military and civilian fleets. Their name, location, power,
+	# fleet-size usage, and ship count are all generic engine-exposed values.
+	every_owned_fleet = {
+		export_trigger_value_to_variable = { trigger = fleet_power variable = paradox_agent_fleet_power }
+		export_trigger_value_to_variable = { trigger = fleet_size variable = paradox_agent_fleet_size }
+		export_trigger_value_to_variable = { trigger = num_ships variable = paradox_agent_fleet_ships }
+		log = "PARADOX_AGENT|FLEET|name=[This.GetNamePersistent]|system=[This.GetStarNamePersistent]|power=[This.paradox_agent_fleet_power]|fleet_size=[This.paradox_agent_fleet_size]|ships=[This.paradox_agent_fleet_ships]"
+	}
+
+	# Built and construction-inclusive starbase totals reveal whether modules or
+	# buildings are queued without hard-coding every possible buildable.
+	every_owned_starbase = {
+		export_trigger_value_to_variable = {
+			trigger = count_starbase_modules
+			parameters = { include_being_constructed = no }
+			variable = paradox_agent_modules
+		}
+		export_trigger_value_to_variable = {
+			trigger = count_starbase_modules
+			parameters = { include_being_constructed = yes }
+			variable = paradox_agent_modules_with_construction
+		}
+		export_trigger_value_to_variable = {
+			trigger = count_starbase_buildings
+			parameters = { include_being_constructed = no }
+			variable = paradox_agent_starbase_buildings
+		}
+		export_trigger_value_to_variable = {
+			trigger = count_starbase_buildings
+			parameters = { include_being_constructed = yes }
+			variable = paradox_agent_starbase_buildings_with_construction
+		}
+		log = "PARADOX_AGENT|STARBASE|name=[This.GetNamePersistent]|system=[This.GetStarNamePersistent]|class=[This.GetShipSizeName]|modules=[This.paradox_agent_modules]|modules_with_construction=[This.paradox_agent_modules_with_construction]|buildings=[This.paradox_agent_starbase_buildings]|buildings_with_construction=[This.paradox_agent_starbase_buildings_with_construction]"
+	}
+}
