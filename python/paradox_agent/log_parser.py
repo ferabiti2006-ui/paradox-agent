@@ -53,11 +53,24 @@ def parse_state_blocks(lines: Iterable[str]) -> list[dict[str, Any]]:
         record_type, payload = parsed
 
         if record_type == "STATE_BEGIN":
-            current = {"date": payload.get("date"), "country": None, "planets": []}
-        elif record_type == "COUNTRY" and current is not None:
-            current["country"] = payload
-        elif record_type == "PLANET" and current is not None:
-            current["planets"].append(payload)
+            current = {
+                "schema": payload.get("schema", 1),
+                "date": payload.get("date"),
+                "country": None,
+                "research": None,
+                "planets": [],
+                "fleets": [],
+                "starbases": [],
+            }
+        elif record_type in {"COUNTRY", "RESEARCH"} and current is not None:
+            current[record_type.lower()] = payload
+        elif record_type in {"PLANET", "FLEET", "STARBASE"} and current is not None:
+            collection = {
+                "PLANET": "planets",
+                "FLEET": "fleets",
+                "STARBASE": "starbases",
+            }[record_type]
+            current[collection].append(payload)
         elif record_type == "STATE_END" and current is not None:
             if current["country"] is not None:
                 snapshots.append(current)
@@ -80,4 +93,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
