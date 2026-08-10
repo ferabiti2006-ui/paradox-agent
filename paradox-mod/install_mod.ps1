@@ -18,7 +18,20 @@ if (-not (Test-Path -LiteralPath $sourceMod)) {
 }
 
 New-Item -ItemType Directory -Force -Path $stellarisModRoot | Out-Null
-New-Item -ItemType Directory -Force -Path $targetMod | Out-Null
+
+$resolvedModRoot = [System.IO.Path]::GetFullPath($stellarisModRoot)
+$resolvedTargetMod = [System.IO.Path]::GetFullPath($targetMod)
+$requiredPrefix = $resolvedModRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+if (-not $resolvedTargetMod.StartsWith($requiredPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to replace an unsafe mod target: $resolvedTargetMod"
+}
+
+# Mirror the source so files removed during development cannot survive in the
+# installed mod and continue loading in Stellaris.
+if (Test-Path -LiteralPath $resolvedTargetMod) {
+    Remove-Item -LiteralPath $resolvedTargetMod -Recurse -Force
+}
+New-Item -ItemType Directory -Force -Path $resolvedTargetMod | Out-Null
 Copy-Item -Path (Join-Path $sourceMod '*') -Destination $targetMod -Recurse -Force
 
 $descriptor = @'
