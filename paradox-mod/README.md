@@ -29,7 +29,8 @@ descriptor. It never edits the vanilla game installation.
 ## First manual test
 
 1. Fully close Stellaris, then start the Paradox Launcher and enable **Paradox Agent Testbed**.
-2. Start a new game with any normal biological empire.
+2. Start a new game with **Paradox Agent Test Empire**. Do not randomize or
+   substitute another empire for this test.
 3. Select the **Paradox Agent Testbed (1 System)** galaxy size.
 4. Start the game and allow at least one month to pass.
 5. Inspect `Documents\Paradox Interactive\Stellaris\logs\game.log`.
@@ -44,4 +45,3 @@ The static scenario requests exactly one generated system. Some DLC or vanilla
 startup scripts may still create isolated special systems. They are outside the
 test empire's playable economy and will be handled only if they interfere with
 repeatability.
-
