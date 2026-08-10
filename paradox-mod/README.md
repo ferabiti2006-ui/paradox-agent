@@ -1,13 +1,11 @@
 # Paradox Agent Testbed
 
 This folder contains the Stellaris side of the project. Version 0.1 targets
-Stellaris **4.4.x (Pegasus)** and establishes the smallest useful integration
-test:
+Stellaris **4.4.x (Pegasus)** and establishes a stable integration baseline:
 
 - one player empire;
-- one generated star system;
 - one colonized homeworld;
-- no AI, fallen, marauder, or pre-FTL empires;
+- a vanilla Tiny galaxy with no AI, fallen, marauder, or pre-FTL empires;
 - a hidden monthly event that writes structured state records to `game.log`.
 
 The game remains the simulator. The mod exposes observations; later milestones
@@ -31,17 +29,21 @@ descriptor. It never edits the vanilla game installation.
 1. Fully close Stellaris, then start the Paradox Launcher and enable **Paradox Agent Testbed**.
 2. Start a new game with **Paradox Agent Test Empire**. Do not randomize or
    substitute another empire for this test.
-3. Select the **Paradox Agent Testbed (1 System)** galaxy size.
-4. Start the game and allow at least one month to pass.
-5. Inspect `Documents\Paradox Interactive\Stellaris\logs\game.log`.
-6. Search for `PARADOX_AGENT|`.
+3. Select the vanilla **Tiny** galaxy size.
+4. Set **AI Empires**, **Advanced AI Starts**, **Fallen Empires**, and
+   **Marauder Empires** to zero. Set **Pre-FTL Civilizations** to 0x.
+5. Start the game and allow at least one month to pass.
+6. Inspect `Documents\Paradox Interactive\Stellaris\logs\game.log`.
+7. Search for `PARADOX_AGENT|`.
 
 Expected markers include `BRIDGE_READY`, `STATE_BEGIN`, `COUNTRY`, and
 `STATE_END`.
 
-## Important limitation
+## Why the one-system scenario is temporarily disabled
 
-The static scenario requests exactly one generated system. Some DLC or vanilla
-startup scripts may still create isolated special systems. They are outside the
-test empire's playable economy and will be handled only if they interfere with
-repeatability.
+Stellaris 4.4.6 crashes in galaxy generation when the test mod supplies a
+single-system static scenario: its startup effects attempt to add buildings
+before the homeworld is colonizable. The stable baseline therefore leaves
+galaxy generation entirely to vanilla Stellaris. Once the observation bridge
+is confirmed working, galaxy reduction can be reintroduced in smaller,
+separately tested steps.
