@@ -10,9 +10,9 @@ from pathlib import Path
 REQUIRED_FILES = (
     "descriptor.mod",
     "map/setup_scenarios/paradox_agent_testbed.txt",
-    "common/solar_system_initializers/paradox_agent_testbed_system.txt",
     "common/on_actions/paradox_agent_testbed_on_actions.txt",
     "events/paradox_agent_testbed_events.txt",
+    "prescripted_countries/paradox_agent_testbed_empire.txt",
     "localisation/english/paradox_agent_testbed_l_english.yml",
 )
 
@@ -54,13 +54,14 @@ def main() -> int:
         if not path.is_file():
             errors.append(f"Missing required file: {path}")
 
-    stale_prescripted = (
+    forbidden_initializer = (
         mod_root
-        / "prescripted_countries"
-        / "paradox_agent_testbed_empire.txt"
+        / "common"
+        / "solar_system_initializers"
+        / "paradox_agent_testbed_system.txt"
     )
-    if stale_prescripted.exists():
-        errors.append("Stale prescripted empire must not ship with the static scenario")
+    if forbidden_initializer.exists():
+        errors.append("Custom home-system initializer must not ship with the testbed")
 
     for path in mod_root.rglob("*.txt"):
         errors.extend(validate_braces(path))
@@ -69,29 +70,6 @@ def main() -> int:
         errors.extend(validate_braces(descriptor))
         if 'supported_version="4.4.*"' not in descriptor.read_text(encoding="utf-8-sig"):
             errors.append("descriptor.mod must target Stellaris 4.4.*")
-
-    initializer_path = (
-        mod_root
-        / "common"
-        / "solar_system_initializers"
-        / "paradox_agent_testbed_system.txt"
-    )
-    if initializer_path.is_file():
-        initializer = initializer_path.read_text(encoding="utf-8-sig")
-        require_pattern(
-            errors,
-            initializer,
-            r"^\s*usage\s*=\s*empire_init\s*$",
-            "The static test system must use 'usage = empire_init'",
-        )
-        if 'name = "PARADOX_AGENT_TESTBED_SYSTEM"' not in initializer:
-            errors.append("The static test system must define an explicit name")
-        if len(re.findall(r"^\s*planet\s*=\s*\{", initializer, re.MULTILINE)) != 2:
-            errors.append("The initializer must contain exactly one star and one planet")
-        if "home_planet = yes" not in initializer:
-            errors.append("The initializer must designate its one planet as the homeworld")
-        if "generate_empire_home_planet = yes" not in initializer:
-            errors.append("The initializer must generate the empire homeworld")
 
     scenario_path = mod_root / "map" / "setup_scenarios" / "paradox_agent_testbed.txt"
     if scenario_path.is_file():
@@ -125,8 +103,32 @@ def main() -> int:
             )
         if len(re.findall(r"^\s*system\s*=\s*\{", scenario, re.MULTILINE)) != 1:
             errors.append("The static scenario must define exactly one system")
-        if "initializer = paradox_agent_testbed_system" not in scenario:
-            errors.append("The static scenario must use the testbed initializer")
+        if "initializer = random_empire_init_01" not in scenario:
+            errors.append("The static scenario must use vanilla random_empire_init_01")
+
+    empire_path = (
+        mod_root
+        / "prescripted_countries"
+        / "paradox_agent_testbed_empire.txt"
+    )
+    if empire_path.is_file():
+        empire = empire_path.read_text(encoding="utf-8-sig")
+        if re.search(r"^\s*initializer\s*=", empire, re.MULTILINE):
+            errors.append("The test empire must not force a special solar initializer")
+        require_pattern(
+            errors,
+            empire,
+            r'^\s*origin\s*=\s*"origin_default"\s*$',
+            "The test empire must use the default Prosperous Unification origin",
+        )
+        require_pattern(
+            errors,
+            empire,
+            r'^\s*planet_class\s*=\s*"pc_continental"\s*$',
+            "The test empire must use a continental homeworld",
+        )
+        if "ethic_gestalt_consciousness" in empire:
+            errors.append("The test empire must not be Gestalt")
 
     on_actions_path = (
         mod_root / "common" / "on_actions" / "paradox_agent_testbed_on_actions.txt"
@@ -176,4 +178,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
