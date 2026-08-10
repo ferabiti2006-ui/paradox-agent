@@ -1,7 +1,7 @@
 namespace = paradox_agent_testbed
 
-# This event first runs after galaxy initialization and then emits a compact
-# state snapshot once per month for the external controller.
+# This event first runs after galaxy initialization and then invokes the
+# read-only observation effect once per month for the external controller.
 country_event = {
 	id = paradox_agent_testbed.10
 	hide_window = yes
@@ -18,24 +18,8 @@ country_event = {
 			log = "PARADOX_AGENT|BRIDGE_READY|date=[GetDate]|country=[This.GetName]"
 		}
 
-		export_resource_stockpile_to_variable = { resource = energy variable = paradox_agent_energy }
-		export_resource_stockpile_to_variable = { resource = minerals variable = paradox_agent_minerals }
-		export_resource_stockpile_to_variable = { resource = food variable = paradox_agent_food }
-		export_resource_stockpile_to_variable = { resource = consumer_goods variable = paradox_agent_consumer_goods }
-		export_resource_stockpile_to_variable = { resource = alloys variable = paradox_agent_alloys }
-		export_resource_stockpile_to_variable = { resource = unity variable = paradox_agent_unity }
-		export_resource_stockpile_to_variable = { resource = influence variable = paradox_agent_influence }
-
-		export_resource_income_to_variable = { resource = energy variable = paradox_agent_energy_income }
-		export_resource_income_to_variable = { resource = minerals variable = paradox_agent_minerals_income }
-		export_resource_income_to_variable = { resource = food variable = paradox_agent_food_income }
-		export_resource_income_to_variable = { resource = consumer_goods variable = paradox_agent_consumer_goods_income }
-		export_resource_income_to_variable = { resource = alloys variable = paradox_agent_alloys_income }
-		export_resource_income_to_variable = { resource = unity variable = paradox_agent_unity_income }
-
-		log = "PARADOX_AGENT|STATE_BEGIN|date=[GetDate]"
-		log = "PARADOX_AGENT|COUNTRY|name=[This.GetName]|energy=[This.paradox_agent_energy]|energy_income=[This.paradox_agent_energy_income]|minerals=[This.paradox_agent_minerals]|minerals_income=[This.paradox_agent_minerals_income]|food=[This.paradox_agent_food]|food_income=[This.paradox_agent_food_income]|consumer_goods=[This.paradox_agent_consumer_goods]|consumer_goods_income=[This.paradox_agent_consumer_goods_income]|alloys=[This.paradox_agent_alloys]|alloys_income=[This.paradox_agent_alloys_income]|unity=[This.paradox_agent_unity]|unity_income=[This.paradox_agent_unity_income]|influence=[This.paradox_agent_influence]"
+		log = "PARADOX_AGENT|STATE_BEGIN|schema=2|date=[GetDate]"
+		paradox_agent_export_observation = yes
 		log = "PARADOX_AGENT|STATE_END|date=[GetDate]"
 	}
 }
-
