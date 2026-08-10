@@ -10,6 +10,7 @@ from pathlib import Path
 REQUIRED_FILES = (
     "descriptor.mod",
     "common/on_actions/paradox_agent_testbed_on_actions.txt",
+    "common/scripted_effects/paradox_agent_observation_effects.txt",
     "events/paradox_agent_testbed_events.txt",
     "prescripted_countries/paradox_agent_testbed_empire.txt",
     "localisation/english/paradox_agent_testbed_l_english.yml",
@@ -114,6 +115,12 @@ def main() -> int:
             errors.append("Bridge must be attached to the monthly country pulse")
 
     event_path = mod_root / "events" / "paradox_agent_testbed_events.txt"
+    observation_path = (
+        mod_root
+        / "common"
+        / "scripted_effects"
+        / "paradox_agent_observation_effects.txt"
+    )
     if event_path.is_file():
         events = event_path.read_text(encoding="utf-8-sig")
         ids = re.findall(r"^\s*id\s*=\s*([\w.]+)\s*$", events, re.MULTILINE)
@@ -122,10 +129,24 @@ def main() -> int:
             errors.append(f"Duplicate event IDs: {', '.join(duplicates)}")
         if "[PARADOX_AGENT]" in events:
             errors.append("Log markers must not use localization-style square brackets")
-        if events.count('log = "PARADOX_AGENT|') != 4:
-            errors.append("Expected four plain Paradox Agent log markers")
-        if "export_trigger_value_to_variable" in events:
-            errors.append("Initial bridge must use only vanilla-proven resource exports")
+        if 'STATE_BEGIN|schema=2|' not in events:
+            errors.append("Observation blocks must declare schema 2")
+        if "paradox_agent_export_observation = yes" not in events:
+            errors.append("Monthly event must invoke the observation scripted effect")
+
+    if observation_path.is_file():
+        observation = observation_path.read_text(encoding="utf-8-sig")
+        combined = events + observation if event_path.is_file() else observation
+        if combined.count('log = "PARADOX_AGENT|') != 8:
+            errors.append("Expected eight schema-2 Paradox Agent log markers")
+        for marker in ("COUNTRY", "RESEARCH", "PLANET", "FLEET", "STARBASE"):
+            if f"PARADOX_AGENT|{marker}|" not in observation:
+                errors.append(f"Missing {marker} observation record")
+        for iterator in ("every_owned_colony", "every_owned_fleet", "every_owned_starbase"):
+            if iterator not in observation:
+                errors.append(f"Missing native iterator: {iterator}")
+        if "exists = planet" not in observation:
+            errors.append("Colony export must exclude mobile colony carriers")
 
     localization = (
         mod_root
