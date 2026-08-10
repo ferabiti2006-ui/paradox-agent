@@ -147,6 +147,16 @@ def main() -> int:
                 errors.append(f"Missing native iterator: {iterator}")
         if "exists = planet" not in observation:
             errors.append("Colony export must exclude mobile colony carriers")
+        if re.search(r'(?<!\\)\[This\.', observation):
+            errors.append(
+                "Localization commands inside scripted effects must escape '['"
+            )
+        if "in_construction = yes" in observation:
+            errors.append(
+                "num_buildings cannot combine type=any with in_construction=yes"
+            )
+        if "has_building_construction = yes" not in observation:
+            errors.append("Planet export must include the supported construction flag")
 
     localization = (
         mod_root
