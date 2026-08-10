@@ -9,7 +9,6 @@ from pathlib import Path
 
 REQUIRED_FILES = (
     "descriptor.mod",
-    "map/setup_scenarios/paradox_agent_testbed.txt",
     "common/on_actions/paradox_agent_testbed_on_actions.txt",
     "events/paradox_agent_testbed_events.txt",
     "prescripted_countries/paradox_agent_testbed_empire.txt",
@@ -63,6 +62,15 @@ def main() -> int:
     if forbidden_initializer.exists():
         errors.append("Custom home-system initializer must not ship with the testbed")
 
+    forbidden_scenario = (
+        mod_root
+        / "map"
+        / "setup_scenarios"
+        / "paradox_agent_testbed.txt"
+    )
+    if forbidden_scenario.exists():
+        errors.append("Static one-system scenario must remain disabled for 4.4.6")
+
     for path in mod_root.rglob("*.txt"):
         errors.extend(validate_braces(path))
     descriptor = mod_root / "descriptor.mod"
@@ -70,41 +78,6 @@ def main() -> int:
         errors.extend(validate_braces(descriptor))
         if 'supported_version="4.4.*"' not in descriptor.read_text(encoding="utf-8-sig"):
             errors.append("descriptor.mod must target Stellaris 4.4.*")
-
-    scenario_path = mod_root / "map" / "setup_scenarios" / "paradox_agent_testbed.txt"
-    if scenario_path.is_file():
-        scenario = scenario_path.read_text(encoding="utf-8-sig")
-        require_pattern(
-            errors,
-            scenario,
-            r"^\s*num_empires\s*=\s*\{\s*min\s*=\s*0\s+max\s*=\s*0\s*\}\s*$",
-            "The one-system scenario must allow zero AI empires",
-        )
-        require_pattern(
-            errors,
-            scenario,
-            r"^\s*num_empire_default\s*=\s*0\s*$",
-            "The one-system scenario must default to zero AI empires",
-        )
-        for setting in (
-            "fallen_empire_default",
-            "fallen_empire_max",
-            "marauder_empire_default",
-            "marauder_empire_max",
-            "nomad_empire_default",
-            "nomad_empire_max",
-            "advanced_empire_default",
-        ):
-            require_pattern(
-                errors,
-                scenario,
-                rf"^\s*{setting}\s*=\s*0\s*$",
-                f"The one-system scenario must set {setting} to zero",
-            )
-        if len(re.findall(r"^\s*system\s*=\s*\{", scenario, re.MULTILINE)) != 1:
-            errors.append("The static scenario must define exactly one system")
-        if "initializer = random_empire_init_01" not in scenario:
-            errors.append("The static scenario must use vanilla random_empire_init_01")
 
     empire_path = (
         mod_root
