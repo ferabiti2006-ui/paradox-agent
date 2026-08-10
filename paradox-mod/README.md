@@ -36,8 +36,23 @@ descriptor. It never edits the vanilla game installation.
 6. Inspect `Documents\Paradox Interactive\Stellaris\logs\game.log`.
 7. Search for `PARADOX_AGENT|`.
 
-Expected markers include `BRIDGE_READY`, `STATE_BEGIN`, `COUNTRY`, and
-`STATE_END`.
+Expected schema-2 markers include `BRIDGE_READY`, `STATE_BEGIN`, `COUNTRY`,
+`RESEARCH`, `PLANET`, `FLEET`, `STARBASE`, and `STATE_END`.
+
+The monthly bridge uses only Stellaris-native scripted effects and iterators
+documented by the running 4.4.6 build. It exports:
+
+- empire resources, population, systems, colonies, and capacity totals;
+- research income, stored research, options, and researched-tech count;
+- planet population, jobs, housing, amenities, stability, crime, districts,
+  buildings, and building-construction totals;
+- fleet names, locations, power, size, and ship counts;
+- starbase names, locations, modules, buildings, and construction-inclusive
+  totals.
+
+Exact technology names, arbitrary building/district type lists, and exact queue
+item names are not generically enumerable through Stellaris scripting. Those
+details will be added through save parsing rather than hard-coded into the mod.
 
 ## Why the one-system scenario is temporarily disabled
 
