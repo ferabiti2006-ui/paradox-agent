@@ -71,6 +71,30 @@ def main() -> int:
     ):
         errors.append("descriptor.mod must target Stellaris 4.4.*")
 
+    initializer_path = (
+        mod_root
+        / "common"
+        / "solar_system_initializers"
+        / "paradox_agent_testbed_system.txt"
+    )
+    if initializer_path.is_file():
+        initializer_text = initializer_path.read_text(encoding="utf-8-sig")
+        if not re.search(r"^\s*usage\s*=\s*custom_empire\s*$", initializer_text, re.MULTILINE):
+            errors.append("The fixed test system must use 'usage = custom_empire'")
+        if 'name = "PARADOX_AGENT_TESTBED_SYSTEM"' not in initializer_text:
+            errors.append("The fixed test system must define its explicit display name")
+
+    localization_path = (
+        mod_root
+        / "localisation"
+        / "english"
+        / "paradox_agent_testbed_l_english.yml"
+    )
+    if localization_path.is_file() and "paradox_agent_testbed_system_NAME:" not in (
+        localization_path.read_text(encoding="utf-8-sig")
+    ):
+        errors.append("Missing custom-system selector localization")
+
     if errors:
         print("Mod validation failed:")
         for error in errors:
