@@ -145,10 +145,12 @@ def main() -> int:
         duplicates = sorted({event_id for event_id in ids if ids.count(event_id) > 1})
         if duplicates:
             errors.append(f"Duplicate event IDs: {', '.join(duplicates)}")
-        if re.search(r'log\s*=\s*"\[PARADOX_AGENT\]', events):
-            errors.append("Log markers must escape '[' to avoid localization parsing")
-        if events.count('log = "\\\\[PARADOX_AGENT]') != 5:
-            errors.append("Expected five escaped Paradox Agent log markers")
+        if "[PARADOX_AGENT]" in events:
+            errors.append("Log markers must not use localization-style square brackets")
+        if events.count('log = "PARADOX_AGENT|') != 4:
+            errors.append("Expected four plain Paradox Agent log markers")
+        if "export_trigger_value_to_variable" in events:
+            errors.append("Initial bridge must use only vanilla-proven resource exports")
 
     localization = (
         mod_root
