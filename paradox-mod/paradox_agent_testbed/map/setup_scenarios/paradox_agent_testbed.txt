@@ -27,8 +27,9 @@ static_galaxy_scenario = {
 		id = "0"
 		name = "PARADOX_AGENT_TESTBED_SYSTEM"
 		position = { x = 0 y = 0 }
-		initializer = paradox_agent_testbed_system
+		# Use a vanilla 4.4.6 initializer so homeworld creation follows the same
+		# tested path as an ordinary random empire.
+		initializer = random_empire_init_01
 		spawn_weight = { base = 100 }
 	}
 }
-
