@@ -95,6 +95,22 @@ def main() -> int:
     ):
         errors.append("Missing custom-system selector localization")
 
+    scenario_path = (
+        mod_root / "map" / "setup_scenarios" / "paradox_agent_testbed.txt"
+    )
+    if scenario_path.is_file():
+        scenario_text = scenario_path.read_text(encoding="utf-8-sig")
+        if not re.search(
+            r"^\s*num_empires\s*=\s*\{\s*min\s*=\s*0\s+max\s*=\s*0\s*\}\s*$",
+            scenario_text,
+            re.MULTILINE,
+        ):
+            errors.append("The one-system scenario must allow zero AI empires")
+        if not re.search(
+            r"^\s*num_empire_default\s*=\s*0\s*$", scenario_text, re.MULTILINE
+        ):
+            errors.append("The one-system scenario must default to zero AI empires")
+
     if errors:
         print("Mod validation failed:")
         for error in errors:
