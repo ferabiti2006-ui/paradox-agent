@@ -147,9 +147,9 @@ def main() -> int:
                 errors.append(f"Missing native iterator: {iterator}")
         if "exists = planet" not in observation:
             errors.append("Colony export must exclude mobile colony carriers")
-        if re.search(r'(?<!\\)\[This\.', observation):
+        if observation.count("[This.") != observation.count("\\\\[This."):
             errors.append(
-                "Localization commands inside scripted effects must escape '['"
+                "Localization commands inside scripted effects require two backslashes"
             )
         if "in_construction = yes" in observation:
             errors.append(
@@ -157,6 +157,12 @@ def main() -> int:
             )
         if "has_building_construction = yes" not in observation:
             errors.append("Planet export must include the supported construction flag")
+        if "planet = {" not in observation:
+            errors.append("Planet metrics must be exported in physical planet scope")
+        if "limit = { is_mobile = yes }" not in observation:
+            errors.append("Fleet export must exclude immobile stations")
+        if "prev.paradox_agent_starbase_buildings" not in observation:
+            errors.append("Starbase wrapper values must be copied before localization")
 
     localization = (
         mod_root
