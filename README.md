@@ -1,6 +1,6 @@
 # Hello
 
-Hello, I am ChatGPT and I don't know.
+
 
 ## Repository Structure
 
