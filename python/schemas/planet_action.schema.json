@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://paradox-agent.local/schemas/planet-action-v1.json",
+  "title": "Stale-resistant Planetary Action API V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "observation_date", "state_fingerprint", "action"],
+  "properties": {
+    "schema": { "const": 1 },
+    "observation_date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}\\.[0-9]{2}\\.[0-9]{2}$"
+    },
+    "state_fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "action": {
+      "oneOf": [
+        { "$ref": "#/$defs/wait" },
+        { "$ref": "#/$defs/buildDistrict" },
+        { "$ref": "#/$defs/buildBuilding" }
+      ]
+    }
+  },
+  "$defs": {
+    "wait": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "months"],
+      "properties": {
+        "type": { "const": "WAIT" },
+        "months": { "type": "integer", "minimum": 1, "maximum": 12 }
+      }
+    },
+    "buildDistrict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "planet_id", "district"],
+      "properties": {
+        "type": { "const": "BUILD_DISTRICT" },
+        "planet_id": { "type": "integer", "minimum": 0 },
+        "district": {
+          "enum": ["district_city", "district_generator", "district_mining", "district_farming"]
+        }
+      }
+    },
+    "buildBuilding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "planet_id", "building"],
+      "properties": {
+        "type": { "const": "BUILD_BUILDING" },
+        "planet_id": { "type": "integer", "minimum": 0 },
+        "building": {
+          "enum": [
+            "building_research_lab_1",
+            "building_holo_theatres",
+            "building_foundry_1",
+            "building_factory_1",
+            "building_bureaucratic_1"
+          ]
+        }
+      }
+    }
+  }
+}

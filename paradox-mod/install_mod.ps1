@@ -48,4 +48,3 @@ Set-Content -LiteralPath $launcherDescriptor -Value $descriptor -Encoding utf8
 Write-Host "Installed Paradox Agent Testbed to: $targetMod"
 Write-Host "Launcher descriptor: $launcherDescriptor"
 Write-Host 'Enable the mod in the Paradox Launcher before starting a new game.'
-

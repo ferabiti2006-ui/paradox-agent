@@ -166,4 +166,3 @@ def parse_clausewitz(text: str) -> PdxObject:
     """Parse a complete text-format Clausewitz document."""
 
     return _Parser(text).parse()
-

@@ -22,6 +22,9 @@ country={
     owned_planets={ 0 }
     tech_status={
       technology="tech_one" level=1
+      physics_queue={ { technology="tech_p" date="2202.01.01" } }
+      society_queue={ }
+      engineering_queue={ { technology="tech_e" date="2202.01.01" } }
       stored_techpoints={ 1 2 3 }
       alternatives={ physics={ "tech_p" } society={ "tech_s" } engineering={ "tech_e" } }
       auto_researching_physics=no auto_researching_society=no auto_researching_engineering=no
@@ -34,7 +37,18 @@ country={
   1={ name={ key="FOREIGN_EMPIRE" } modules={ standard_economy_module={ resources={ energy=9999 } } } }
 }
 planets={ planet={
-  4={ colony=0 owner=0 name={ key="TEST_PLANET" } planet_class="pc_continental" planet_size=20 build_queue=0 }
+  4={
+    colony=0 owner=0 name={ key="TEST_PLANET" } planet_class="pc_continental" planet_size=20 build_queue=0
+    variables={
+      paradox_agent_free_district_slots=8
+      paradox_agent_free_district_city=8
+      paradox_agent_free_district_generator=4
+      paradox_agent_free_district_mining=3
+      paradox_agent_free_district_farming=2
+      paradox_agent_free_building_slots=5
+      paradox_agent_can_build_building_research_lab_1=1
+    }
+  }
   5={ colony=1 owner=1 name={ key="FOREIGN_PLANET" } }
 } }
 colony={ 0={
@@ -61,10 +75,10 @@ ship_design={ 0={
   growth_stages={ { ship_size="corvette" section={ template="CORVETTE_MID" slot="mid" component={ slot="GUN" template="LASER" } } required_component="DRIVE" } }
 } }
 construction={ queue_mgr={ queues={
-  0={ owner=0 location={ type=2 id=4 } simultaneous=1 type=planet }
+  0={ items={ 0 } owner=0 location={ type=2 id=4 } simultaneous=1 type=planet }
   1={ owner=1 location={ type=2 id=5 } simultaneous=1 type=planet }
   2={ owner=0 location={ type=2 id=6 } simultaneous=1 type=planet disabled=yes }
-} } }
+} } item_mgr={ items={ 0={ queue=0 progress=0 progress_needed=480 buildable_district={ district="district_city" planet=0 } } } } }
 '''
 
 
@@ -86,8 +100,46 @@ class SaveParserTests(unittest.TestCase):
         self.assertEqual(player["resources"], {"energy": 100, "minerals": 50})
         self.assertEqual(player["monthly_balance"], {"energy": 8.0, "minerals": -1.0})
         self.assertEqual(player["research"]["researched"], [{"id": "tech_one", "level": 1}])
+        self.assertEqual(
+            player["research"]["active"],
+            {"physics": "tech_p", "society": None, "engineering": "tech_e"},
+        )
+        self.assertEqual(
+            player["research"]["queues"]["physics"],
+            [{"technology_id": "tech_p", "selected_on": "2202.01.01"}],
+        )
         self.assertEqual(player["planets"][0]["buildings"][0]["type"], "building_capital")
         self.assertEqual(player["planets"][0]["districts"][0]["level"], 2)
+        self.assertEqual(player["planets"][0]["owner_id"], 0)
+        self.assertEqual(
+            player["planets"][0]["population"],
+            {
+                "sapient": 42.0,
+                "unemployed": None,
+                "available_jobs": None,
+                "authoritative": False,
+            },
+        )
+        self.assertEqual(
+            player["planets"][0]["district_capacity"],
+            {"used": 2, "available": 8, "maximum": 10, "authoritative": True},
+        )
+        self.assertEqual(
+            player["planets"][0]["district_availability"]["district_mining"]["available"],
+            3,
+        )
+        self.assertEqual(
+            player["planets"][0]["building_capacity"],
+            {"used": 1, "available": 5, "maximum": 6, "authoritative": True},
+        )
+        self.assertTrue(
+            player["planets"][0]["building_availability"]["building_research_lab_1"]["buildable"]
+        )
+        self.assertFalse(player["planets"][0]["construction_queue"]["safe_to_build"])
+        self.assertEqual(
+            player["planets"][0]["construction_queue"]["details"]["items"][0]["buildable_district"]["district"],
+            "district_city",
+        )
         self.assertEqual(player["fleets"][0]["ships"][0]["design_id"], 0)
         self.assertEqual(player["ship_designs"][0]["components"][0]["template"], "LASER")
         self.assertEqual([queue["id"] for queue in player["construction_queues"]], [0])
@@ -97,4 +149,3 @@ class SaveParserTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
