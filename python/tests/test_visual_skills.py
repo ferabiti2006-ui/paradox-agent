@@ -237,6 +237,66 @@ class BuildingScreenAnalyzerTests(unittest.TestCase):
         self.assertEqual(coordinates, ((400, 560), (500, 560)))
         self.assertEqual(evidence["slot_candidates"], [[400, 560], [500, 560]])
 
+    def test_groups_city_archives_and_mixed_industry_slots(self) -> None:
+        from PIL import Image, ImageDraw
+
+        image = Image.new("RGB", (1920, 1080), (10, 15, 18))
+        draw = ImageDraw.Draw(image)
+
+        def draw_live_sized_plus(x: int, y: int) -> None:
+            # 125 pixels: the live Mixed Industry antialias mask was larger
+            # than the legacy 120-pixel component ceiling.
+            draw.rectangle((x - 7, y - 2, x + 7, y + 2), fill=(20, 235, 205))
+            draw.rectangle((x - 2, y - 7, x + 2, y + 7), fill=(20, 235, 205))
+
+        for coordinate in (
+            (401, 567),
+            (793, 564),
+            (271, 632),
+            (336, 632),
+            (401, 632),
+            (728, 631),
+            (793, 631),
+        ):
+            draw_live_sized_plus(*coordinate)
+
+        lines = self.base + (
+            line("Archives", 520, 568),
+            line("Mixed Industry", 540, 632),
+        )
+        coordinates, evidence = self.analyzer.locate_empty_building_slots(
+            "Axiom Prime", lines, image
+        )
+
+        self.assertEqual(
+            coordinates,
+            (
+                (793, 564),
+                (401, 567),
+                (728, 631),
+                (793, 631),
+                (271, 632),
+                (336, 632),
+                (401, 632),
+            ),
+        )
+        self.assertEqual(len(evidence["slot_groups"]), 4)
+        self.assertEqual(
+            evidence["slot_groups"][1]["nearby_label"], "Archives"
+        )
+        self.assertEqual(
+            evidence["slot_groups"][3]["nearby_label"], "Mixed Industry"
+        )
+
+    def test_rejects_filled_cyan_square_as_building_slot(self) -> None:
+        from PIL import Image, ImageDraw
+
+        image = Image.new("RGB", (1920, 1080), (10, 15, 18))
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((393, 553, 407, 567), fill=(20, 235, 205))
+        with self.assertRaisesRegex(VisualSkillError, "empty building slot"):
+            self.analyzer.locate_empty_building_slots("Axiom Prime", self.base, image)
+
     def test_rejects_missing_empty_building_slot(self) -> None:
         from PIL import Image
 
@@ -397,3 +457,4 @@ class InstalledGameIntegrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
