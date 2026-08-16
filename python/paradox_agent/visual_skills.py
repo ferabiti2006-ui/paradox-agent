@@ -611,27 +611,107 @@ class BuildingScreenAnalyzer(DistrictScreenAnalyzer):
             & ((green.astype(int) - red.astype(int)) >= 60)
             & ((blue.astype(int) - red.astype(int)) >= 45)
         ).astype("uint8")
-        count, _, stats, centers = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        count, component_labels, stats, centers = cv2.connectedComponentsWithStats(
+            mask, connectivity=8
+        )
         anchor_y = anchors[0].center[1]
         candidates: list[tuple[int, int]] = []
         for index in range(1, count):
             x, y, width, height, area = (int(value) for value in stats[index])
             center_x, center_y = (round(float(value)) for value in centers[index])
-            if (
+            geometry_matches = (
                 8 <= width <= 18
                 and 8 <= height <= 20
-                and 15 <= area <= 120
+                and 15 <= area <= 160
                 and 150 <= center_x < 850
                 and anchor_y + 55 <= center_y <= anchor_y + 240
+            )
+            if not geometry_matches:
+                continue
+
+            # The 4.4.6 zone rows render their empty-slot plus icons with
+            # slightly different antialiasing.  Archives measured 112 mask
+            # pixels in the live client while Mixed Industry measured 123,
+            # which made the old 120-pixel ceiling silently omit the latter.
+            # Accept that variance only when the component still has a
+            # horizontal and vertical stroke and does not fill its corners.
+            component = component_labels[y : y + height, x : x + width] == index
+            fill_ratio = area / (width * height)
+            horizontal_stroke = int(component.sum(axis=1).max())
+            vertical_stroke = int(component.sum(axis=0).max())
+            filled_corners = sum(
+                bool(component[row, column])
+                for row, column in (
+                    (0, 0),
+                    (0, width - 1),
+                    (height - 1, 0),
+                    (height - 1, width - 1),
+                )
+            )
+            if (
+                0.30 <= fill_ratio <= 0.72
+                and horizontal_stroke >= max(6, round(width * 0.70))
+                and vertical_stroke >= max(6, round(height * 0.70))
+                and filled_corners <= 1
             ):
                 candidates.append((center_x, center_y))
         candidates = sorted(set(candidates), key=lambda point: (point[1], point[0]))
         if not candidates:
             raise VisualSkillError("no visually grounded empty building slot was found")
+
+        # Stellaris 4.4.6 divides planetary buildings into multiple zone
+        # grids.  Group candidates first by visual row and then split large
+        # horizontal gaps so Archives, Mixed Industry, and the city-zone grid
+        # remain distinct pieces of evidence even when they share a y value.
+        rows: list[list[tuple[int, int]]] = []
+        for candidate in candidates:
+            if not rows or abs(candidate[1] - round(
+                sum(point[1] for point in rows[-1]) / len(rows[-1])
+            )) > 8:
+                rows.append([candidate])
+            else:
+                rows[-1].append(candidate)
+
+        groups: list[list[tuple[int, int]]] = []
+        for row in rows:
+            for candidate in sorted(row, key=lambda point: point[0]):
+                if not groups or (
+                    abs(candidate[1] - groups[-1][-1][1]) > 8
+                    or candidate[0] - groups[-1][-1][0] > 110
+                ):
+                    groups.append([candidate])
+                else:
+                    groups[-1].append(candidate)
+
+        reliable_lines = self._reliable(lines)
+        slot_groups: list[dict[str, Any]] = []
+        for group in groups:
+            row_center_y = round(sum(point[1] for point in group) / len(group))
+            nearby_labels = tuple(
+                line
+                for line in reliable_lines
+                if 140 <= line.center[0] < min(point[0] for point in group) - 10
+                and abs(line.center[1] - row_center_y) <= 26
+            )
+            nearby_label = max(nearby_labels, key=lambda line: line.center[0], default=None)
+            group_evidence: dict[str, Any] = {
+                "row_center_y": row_center_y,
+                "x_range": [
+                    min(point[0] for point in group),
+                    max(point[0] for point in group),
+                ],
+                "candidates": [list(point) for point in group],
+            }
+            if nearby_label is not None:
+                group_evidence["nearby_label"] = nearby_label.text
+                group_evidence["nearby_label_center"] = list(nearby_label.center)
+            slot_groups.append(group_evidence)
+
         return tuple(candidates), {
             "anchor_text": anchors[0].text,
             "anchor_center": list(anchors[0].center),
             "slot_candidates": [list(point) for point in candidates],
+            "slot_groups": slot_groups,
         }
 
     def locate_empty_building_slot(
@@ -998,3 +1078,4 @@ class ResearchVisualSkill:
             "target_evidence": target_evidence,
             "verification": verification,
         }
+
