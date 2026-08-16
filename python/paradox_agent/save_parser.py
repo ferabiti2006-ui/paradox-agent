@@ -9,6 +9,15 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from .planet_catalog import (
+    BUILDINGS,
+    BUILDING_BASE_COSTS,
+    BUILDING_TYPES,
+    DISTRICTS,
+    DISTRICT_BASE_COSTS,
+    DISTRICT_TYPES,
+    SUPPORTED_GAME_VERSION,
+)
 from .clausewitz import PdxObject, Value, parse_clausewitz
 
 
@@ -150,8 +159,30 @@ def _research(country: PdxObject) -> dict[str, Any]:
         numbers = [item for item in stored_block.values if isinstance(item, (int, float)) and not isinstance(item, bool)]
         stored = {area: numbers[index] for index, area in enumerate(RESEARCH_AREAS) if index < len(numbers)}
 
+    queues: dict[str, list[dict[str, str]]] = {}
+    active: dict[str, str | None] = {}
+    for area in RESEARCH_AREAS:
+        queue_block = status.object(f"{area}_queue") if status else None
+        queue: list[dict[str, str]] = []
+        if queue_block is not None:
+            candidates = [item for item in queue_block.values if isinstance(item, PdxObject)]
+            candidates.extend(item for _, item in queue_block.entries if isinstance(item, PdxObject))
+            for item in candidates:
+                technology_id = item.get("technology")
+                if not isinstance(technology_id, str):
+                    continue
+                row = {"technology_id": technology_id}
+                selected_on = item.get("date")
+                if isinstance(selected_on, str):
+                    row["selected_on"] = selected_on
+                queue.append(row)
+        queues[area] = queue
+        active[area] = queue[0]["technology_id"] if queue else None
+
     return {
         "researched": researched,
+        "active": active,
+        "queues": queues,
         "alternatives": alternatives,
         "stored_points": stored,
         "auto_research": {
@@ -161,7 +192,69 @@ def _research(country: PdxObject) -> dict[str, Any]:
     }
 
 
-def _planet_observations(root: PdxObject, country: PdxObject, player_id: int) -> list[dict[str, Any]]:
+def _authoritative_integer_variable(block: PdxObject, name: str) -> int | None:
+    variables = block.object("variables")
+    value = variables.get(name) if variables else None
+    if (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and value >= 0
+    ):
+        rounded = int(value)
+        if value == rounded:
+            return rounded
+    return None
+
+
+def _authoritative_fixed_point_variable(block: PdxObject, name: str) -> float | None:
+    """Read trigger values persisted by Stellaris in hundredths of one unit."""
+
+    variables = block.object("variables")
+    value = variables.get(name) if variables else None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return round(float(value) / 100, 5)
+    return None
+
+
+def _queue_for_planet(
+    queues: list[dict[str, Any]], queue_id: Any, planet_id: int
+) -> dict[str, Any]:
+    matches = [
+        queue
+        for queue in queues
+        if queue.get("id") == queue_id
+        and queue.get("type") == "planet"
+        and queue.get("location_id") == planet_id
+    ]
+    if len(matches) != 1:
+        return {
+            "id": queue_id,
+            "known": False,
+            "active": None,
+            "safe_to_build": False,
+            "details": None,
+        }
+    queue = matches[0]
+    details = queue.get("details")
+    empty = isinstance(details, dict) and not details
+    return {
+        "id": queue_id,
+        "known": True,
+        "active": not empty,
+        "safe_to_build": empty,
+        "details": details,
+    }
+
+
+def _planet_observations(
+    root: PdxObject,
+    country: PdxObject,
+    player_id: int,
+    construction_queues: list[dict[str, Any]],
+    researched_technology_ids: set[str],
+    *,
+    supported_cost_version: bool,
+) -> list[dict[str, Any]]:
     owned_colonies = set(_integer_values(country.get("owned_planets")))
     planets_container = root.object("planets")
     planets = _indexed(planets_container.get("planet") if planets_container else None)
@@ -189,6 +282,11 @@ def _planet_observations(root: PdxObject, country: PdxObject, player_id: int) ->
                     "type": building.get("type"),
                     "position": building.get("position"),
                 })
+        building_counts = {building_type: 0 for building_type in BUILDING_TYPES}
+        for row in building_rows:
+            building_type = row.get("type")
+            if building_type in building_counts:
+                building_counts[building_type] += 1
         district_rows = []
         for district_id in _integer_values(colony.get("districts")):
             district = districts.get(district_id)
@@ -199,14 +297,115 @@ def _planet_observations(root: PdxObject, country: PdxObject, player_id: int) ->
                     "level": district.get("level", 1),
                 })
 
+        district_counts = {district_type: 0 for district_type in DISTRICT_TYPES}
+        for row in district_rows:
+            district_type = row.get("type")
+            level = row.get("level")
+            if district_type in district_counts and isinstance(level, int) and not isinstance(level, bool):
+                district_counts[district_type] += level
+        used_districts = sum(
+            row["level"]
+            for row in district_rows
+            if isinstance(row.get("level"), int) and not isinstance(row.get("level"), bool)
+        )
+        available_districts = _authoritative_integer_variable(
+            planet, "paradox_agent_free_district_slots"
+        )
+        district_availability: dict[str, dict[str, Any]] = {}
+        standard_district_cost_model = _authoritative_integer_variable(
+            planet, "paradox_agent_standard_district_cost_model"
+        )
+        for district_type in DISTRICT_TYPES:
+            available = _authoritative_integer_variable(
+                planet, f"paradox_agent_free_{district_type}"
+            )
+            cost = DISTRICT_BASE_COSTS[district_type] if supported_cost_version else None
+            definition = DISTRICTS[district_type]
+            district_availability[district_type] = {
+                "id": district_type,
+                "category": definition.category,
+                "built": district_counts[district_type],
+                "available": available,
+                "cap": district_counts[district_type] + available
+                if available is not None
+                else None,
+                "buildable": available is not None
+                and available > 0
+                and cost is not None
+                and standard_district_cost_model == 1,
+                "authoritative": available is not None
+                and cost is not None
+                and standard_district_cost_model == 1,
+                "cost": dict(cost) if cost is not None else None,
+                "cost_basis": "installed_definition_manifest_4.4.6"
+                if cost is not None
+                else "unsupported_game_version",
+                "definition_file": definition.definition_file,
+                "cost_model": "ordinary_non_wooden_planet"
+                if standard_district_cost_model == 1
+                else "unsupported_or_unknown",
+            }
+
+        available_building_slots = _authoritative_integer_variable(
+            planet, "paradox_agent_free_building_slots"
+        )
+        building_availability: dict[str, dict[str, Any]] = {}
+        for building_type in BUILDING_TYPES:
+            can_build = _authoritative_integer_variable(
+                planet, f"paradox_agent_can_build_{building_type}"
+            )
+            cost = BUILDING_BASE_COSTS[building_type] if supported_cost_version else None
+            authoritative = (
+                available_building_slots is not None
+                and can_build is not None
+                and cost is not None
+            )
+            definition = BUILDINGS[building_type]
+            building_availability[building_type] = {
+                "id": building_type,
+                "category": definition.category,
+                "policy_role": definition.policy_role,
+                "built": building_counts[building_type],
+                "buildable": authoritative
+                and available_building_slots > 0
+                and can_build == 1,
+                "authoritative": authoritative,
+                "cost": dict(cost) if cost is not None else None,
+                "cost_basis": "installed_definition_manifest_4.4.6"
+                if cost is not None
+                else "unsupported_game_version",
+                "prerequisites": list(definition.prerequisites),
+                "requirements_met": all(
+                    technology in researched_technology_ids
+                    for technology in definition.prerequisites
+                ),
+                "upgrades": list(definition.upgrades),
+                "definition_file": definition.definition_file,
+            }
+
+        queue_id = planet.get("build_queue")
+        planet_queue = _queue_for_planet(construction_queues, queue_id, planet_id)
+
         raw_pops = _number(colony.get("num_sapient_pops"))
         raw_amenities = _number(colony.get("amenities"))
         raw_amenities_usage = _number(colony.get("amenities_usage"))
         raw_housing = _number(colony.get("total_housing"))
         raw_housing_usage = _number(colony.get("housing_usage"))
+        unemployed = _authoritative_fixed_point_variable(
+            planet, "paradox_agent_unemployed"
+        )
+        free_jobs = _authoritative_fixed_point_variable(planet, "paradox_agent_free_jobs")
+        free_housing = _authoritative_fixed_point_variable(
+            planet, "paradox_agent_free_housing"
+        )
+        free_amenities = _authoritative_fixed_point_variable(
+            planet, "paradox_agent_free_amenities"
+        )
         observations.append({
             "id": planet_id,
             "colony_id": colony_id,
+            "owner_id": player_id,
+            "name": _name_key(planet),
             "name_key": _name_key(planet),
             "class": planet.get("planet_class"),
             "size": planet.get("planet_size"),
@@ -215,16 +414,45 @@ def _planet_observations(root: PdxObject, country: PdxObject, player_id: int) ->
             "crime": colony.get("crime"),
             "pops": raw_pops / 100,
             "pops_raw": raw_pops,
+            "population": {
+                "sapient": raw_pops / 100,
+                "unemployed": unemployed,
+                "available_jobs": free_jobs,
+                "authoritative": unemployed is not None and free_jobs is not None,
+            },
             "amenities": raw_amenities / 100,
             "amenities_usage": raw_amenities_usage / 100,
             "housing": raw_housing / 100,
             "housing_usage": raw_housing_usage / 100,
+            "housing_balance": free_housing,
+            "amenities_balance": free_amenities,
             "buildings": building_rows,
+            "building_counts": building_counts,
+            "building_capacity": {
+                "used": len(building_rows),
+                "available": available_building_slots,
+                "maximum": len(building_rows) + available_building_slots
+                if available_building_slots is not None
+                else None,
+                "authoritative": available_building_slots is not None,
+            },
+            "building_availability": building_availability,
             "districts": district_rows,
+            "district_counts": district_counts,
+            "district_capacity": {
+                "used": used_districts,
+                "available": available_districts,
+                "maximum": used_districts + available_districts
+                if available_districts is not None
+                else None,
+                "authoritative": available_districts is not None,
+            },
+            "district_availability": district_availability,
             "production": _plain_object(colony.object("produces")),
             "upkeep": _plain_object(colony.object("upkeep")),
             "net_output": _plain_object(colony.object("profits")),
             "planet_build_queue_id": planet.get("build_queue"),
+            "construction_queue": planet_queue,
             "army_build_queue_id": colony.get("army_build_queue"),
         })
     return observations
@@ -332,6 +560,8 @@ def _construction_queues(root: PdxObject, player_id: int) -> list[dict[str, Any]
     construction = root.object("construction")
     manager = construction.object("queue_mgr") if construction else None
     queues = _indexed(manager.get("queues") if manager else None)
+    item_manager = construction.object("item_mgr") if construction else None
+    construction_items = _indexed(item_manager.get("items") if item_manager else None)
     result = []
     for queue_id, queue in queues.items():
         if queue.get("owner") != player_id or queue.get("disabled") is True:
@@ -342,6 +572,13 @@ def _construction_queues(root: PdxObject, player_id: int) -> list[dict[str, Any]
             for key, value in queue.entries
             if key not in {"owner", "location", "simultaneous", "type", "disabled"}
         }
+        item_ids = _integer_values(queue.get("items"))
+        if item_ids:
+            details["items"] = [
+                {"id": item_id, **_json_value(construction_items[item_id])}
+                for item_id in item_ids
+                if item_id in construction_items
+            ]
         result.append({
             "id": queue_id,
             "type": queue.get("type"),
@@ -368,7 +605,22 @@ def parse_save(path: str | Path) -> dict[str, Any]:
     if country is None:
         raise ValueError(f"Player country {player_id} is missing from the save")
 
-    planets = _planet_observations(root, country, player_id)
+    construction_queues = _construction_queues(root, player_id)
+    research = _research(country)
+    researched_technology_ids = {
+        row["id"]
+        for row in research["researched"]
+        if isinstance(row, dict) and isinstance(row.get("id"), str)
+    }
+    version = meta.get("version", root.get("version"))
+    planets = _planet_observations(
+        root,
+        country,
+        player_id,
+        construction_queues,
+        researched_technology_ids,
+        supported_cost_version=version == SUPPORTED_GAME_VERSION,
+    )
     capital_colony_id = country.get("capital")
     capital_planet_id = next(
         (planet["id"] for planet in planets if planet["colony_id"] == capital_colony_id),
@@ -380,7 +632,7 @@ def parse_save(path: str | Path) -> dict[str, Any]:
         "source": "stellaris_save",
         "save": {
             "file_name": save_path.name,
-            "version": meta.get("version", root.get("version")),
+            "version": version,
             "date": meta.get("date", root.get("date")),
             "name": meta.get("name", root.get("name")),
             "mods": [item for item in (meta.object("mods").values if meta.object("mods") else []) if isinstance(item, str)],
@@ -393,11 +645,11 @@ def parse_save(path: str | Path) -> dict[str, Any]:
             "starting_system_id": country.get("starting_system"),
             "resources": _country_resources(country),
             "monthly_balance": _monthly_balance(country),
-            "research": _research(country),
+            "research": research,
             "planets": planets,
             "fleets": _fleet_observations(root, country),
             "ship_designs": _design_observations(root, country),
-            "construction_queues": _construction_queues(root, player_id),
+            "construction_queues": construction_queues,
         },
         "visibility": {
             "policy": "player_owned_only",
@@ -423,4 +675,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

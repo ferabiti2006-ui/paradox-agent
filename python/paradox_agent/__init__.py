@@ -3,4 +3,3 @@
 from .log_parser import parse_state_blocks
 
 __all__ = ["parse_state_blocks"]
-

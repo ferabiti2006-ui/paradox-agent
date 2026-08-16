@@ -1,0 +1,6 @@
+# Visual execution layer. Install into the project-local .venv.
+rapidocr==3.9.2
+onnxruntime==1.18.1
+numpy==1.26.4
+opencv-python==4.10.0.84
+Pillow==12.3.0
