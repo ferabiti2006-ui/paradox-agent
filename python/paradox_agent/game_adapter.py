@@ -56,6 +56,11 @@ class PlannedAction:
     building: str | None
     planet_name_key: str | None
     planet_designation_key: str | None
+    slot: int | None = None
+    expected_building: str | None = None
+    target_building: str | None = None
+    building_position: int | None = None
+    building_ui_zone: str | None = None
 
 
 @dataclass(frozen=True)
@@ -157,6 +162,29 @@ def build_execution_plan(
         designation_key = planet.get("designation")
         if not isinstance(designation_key, str) or not designation_key:
             raise AdapterError(f"planet {planet_id} has no authoritative designation key")
+        slot = action.parameters.get("slot")
+        expected_building = action.parameters.get("expected_building")
+        target_building = action.parameters.get("target_building")
+        building_position = None
+        building_ui_zone = None
+        if action.type == "UPGRADE_BUILDING":
+            instances = planet.get("buildings")
+            instance = next(
+                (
+                    row
+                    for row in instances
+                    if isinstance(row, Mapping) and row.get("id") == slot
+                ),
+                None,
+            ) if isinstance(instances, list) else None
+            if not isinstance(instance, Mapping):
+                raise AdapterError(f"building slot {slot!r} disappeared before planning")
+            building_position = instance.get("position")
+            building_ui_zone = instance.get("ui_zone")
+            if not isinstance(building_position, int) or isinstance(building_position, bool):
+                raise AdapterError(f"building slot {slot!r} has no authoritative position")
+            if not isinstance(building_ui_zone, str) or not building_ui_zone:
+                raise AdapterError(f"building slot {slot!r} has no supported visual zone")
         planned.append(
             PlannedAction(
                 action_index=index,
@@ -169,6 +197,11 @@ def build_execution_plan(
                 building=building,
                 planet_name_key=name_key,
                 planet_designation_key=designation_key,
+                slot=slot,
+                expected_building=expected_building,
+                target_building=target_building,
+                building_position=building_position,
+                building_ui_zone=building_ui_zone,
             )
         )
     expected_districts: dict[int, tuple[str, ...]] = {}
@@ -479,6 +512,11 @@ def _new_receipt(plan: ExecutionPlan) -> dict[str, Any]:
                 "building": action.building,
                 "planet_name_key": action.planet_name_key,
                 "planet_designation_key": action.planet_designation_key,
+                "slot": action.slot,
+                "expected_building": action.expected_building,
+                "target_building": action.target_building,
+                "building_position": action.building_position,
+                "building_ui_zone": action.building_ui_zone,
                 "status": "pending",
             }
             for action in plan.actions
@@ -522,7 +560,7 @@ def execute_plan(
     )
     building_skill = (
         BuildingVisualSkill(driver, artifact_directory, localizer=localizer)
-        if any(action.type == "BUILD_BUILDING" for action in plan.actions)
+        if any(action.type in {"BUILD_BUILDING", "UPGRADE_BUILDING"} for action in plan.actions)
         else None
     )
     driver.activate()
@@ -592,6 +630,29 @@ def execute_plan(
                     planet_name_key=action.planet_name_key,
                     planet_designation_key=action.planet_designation_key,
                     building_id=action.building,
+                    observation_date=plan.observation_date,
+                    before_click=journal_click,
+                )
+            elif action.type == "UPGRADE_BUILDING":
+                assert building_skill is not None
+                assert (
+                    action.planet_id is not None
+                    and action.slot is not None
+                    and action.expected_building is not None
+                    and action.target_building is not None
+                    and action.building_position is not None
+                    and action.building_ui_zone is not None
+                    and action.planet_name_key is not None
+                    and action.planet_designation_key is not None
+                )
+                evidence = building_skill.upgrade(
+                    action_index=action.action_index,
+                    planet_name_key=action.planet_name_key,
+                    planet_designation_key=action.planet_designation_key,
+                    position=action.building_position,
+                    ui_zone=action.building_ui_zone,
+                    expected_building_id=action.expected_building,
+                    target_building_id=action.target_building,
                     observation_date=plan.observation_date,
                     before_click=journal_click,
                 )
@@ -689,6 +750,12 @@ def verify_receipt_from_save(
                     and isinstance(row.get("next_click"), Mapping)
                     and row["next_click"].get("stage") == "choose_building"
                 )
+                or (
+                    proposed.get("type") == "UPGRADE_BUILDING"
+                    and row.get("status") == "attempting_upgrade_building"
+                    and isinstance(row.get("next_click"), Mapping)
+                    and row["next_click"].get("stage") == "upgrade_building"
+                )
             )
             for proposed, row in zip(proposed_actions, receipt_actions)
         )
@@ -701,7 +768,17 @@ def verify_receipt_from_save(
     for index, (proposed, row) in enumerate(zip(proposed_actions, receipt_actions)):
         if not isinstance(proposed, Mapping) or not isinstance(row, dict):
             raise AdapterError(f"action {index} is malformed")
-        for field in ("type", "area", "technology_id", "planet_id", "district", "building"):
+        for field in (
+            "type",
+            "area",
+            "technology_id",
+            "planet_id",
+            "district",
+            "building",
+            "slot",
+            "expected_building",
+            "target_building",
+        ):
             if field in proposed and row.get(field) != proposed.get(field):
                 raise AdapterError(f"receipt action {index} does not match decision field {field}")
         if proposed.get("type") == "WAIT":
@@ -754,6 +831,35 @@ def verify_receipt_from_save(
             if not isinstance(building, str) or not _contains_exact_value(details, building):
                 mismatches.append(
                     f"planet {planet_id}: construction queue does not contain {building!r}"
+                )
+            else:
+                row["status"] = "save_verified"
+            continue
+        if proposed.get("type") == "UPGRADE_BUILDING":
+            planet_id = proposed.get("planet_id")
+            slot = proposed.get("slot")
+            target = proposed.get("target_building")
+            planets = state["player"].get("planets", [])
+            planet = next(
+                (
+                    candidate
+                    for candidate in planets
+                    if isinstance(candidate, Mapping) and candidate.get("id") == planet_id
+                ),
+                None,
+            )
+            buildings = planet.get("buildings") if isinstance(planet, Mapping) else None
+            observed = next(
+                (
+                    candidate.get("type")
+                    for candidate in buildings
+                    if isinstance(candidate, Mapping) and candidate.get("id") == slot
+                ),
+                None,
+            ) if isinstance(buildings, list) else None
+            if not isinstance(target, str) or observed != target:
+                mismatches.append(
+                    f"planet {planet_id} slot {slot}: expected upgraded {target!r}, save has {observed!r}"
                 )
             else:
                 row["status"] = "save_verified"
@@ -855,3 +961,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
