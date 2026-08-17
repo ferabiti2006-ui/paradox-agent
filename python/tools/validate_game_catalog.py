@@ -12,7 +12,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from python.paradox_agent.clausewitz import PdxObject, parse_clausewitz
-from python.paradox_agent.planet_catalog import BUILDINGS, DISTRICTS
+from python.paradox_agent.planet_catalog import BUILDINGS, BUILDING_UPGRADES, DISTRICTS
 from python.paradox_agent.visual_skills import StellarisLocalizer, VisualSkillError
 
 
@@ -132,11 +132,58 @@ def validate_catalog(game: Path) -> list[str]:
         except (OSError, ValueError) as error:
             errors.append(str(error))
 
+    for (_, identifier), expected in BUILDING_UPGRADES.items():
+        path = common / "buildings" / expected.definition_file
+        try:
+            definition, local_variables = _definition(path, identifier)
+            variables = {**global_variables, **local_variables}
+            resources = definition.object("resources")
+            inline_scripts = resources.get_all("inline_script") if resources else []
+            actual_cost: dict[str, int | float] = {}
+            for inline in inline_scripts:
+                if not isinstance(inline, PdxObject):
+                    continue
+                if inline.get("script") != "buildings/nomadic_cost_switcher":
+                    continue
+                resource = inline.get("REGULAR_RESOURCE")
+                amount = _resolve(inline.get("COST"), variables)
+                if isinstance(resource, str) and amount is not None:
+                    actual_cost[resource] = amount
+            for cost in resources.get_all("cost") if resources else []:
+                if not isinstance(cost, PdxObject):
+                    continue
+                for resource, amount_value in cost.entries:
+                    amount = _resolve(amount_value, variables)
+                    if isinstance(resource, str) and amount is not None and amount > 0:
+                        actual_cost[resource] = amount
+            prerequisites = definition.object("prerequisites")
+            actual_prerequisites = tuple(
+                value
+                for value in (prerequisites.values if prerequisites else [])
+                if isinstance(value, str)
+            )
+            if actual_cost != dict(expected.cost):
+                errors.append(
+                    f"{identifier}: upgrade cost {dict(expected.cost)!r} != installed {actual_cost!r}"
+                )
+            if actual_prerequisites != expected.prerequisites:
+                errors.append(
+                    f"{identifier}: prerequisites {expected.prerequisites!r} != installed {actual_prerequisites!r}"
+                )
+            if definition.get("can_build") is not False:
+                errors.append(f"{identifier}: expected installed can_build = no")
+        except (OSError, ValueError) as error:
+            errors.append(str(error))
+
     try:
         localizer = StellarisLocalizer(game)
         labels = {
             identifier: localizer.resolve(identifier)
-            for identifier in (*DISTRICTS, *BUILDINGS)
+            for identifier in (
+                *DISTRICTS,
+                *BUILDINGS,
+                *(definition.target for definition in BUILDING_UPGRADES.values()),
+            )
         }
         duplicates = sorted(
             label for label in set(labels.values()) if list(labels.values()).count(label) > 1
@@ -159,6 +206,10 @@ def validate_catalog(game: Path) -> list[str]:
         variable = f"paradox_agent_can_build_{identifier}"
         if variable not in observation:
             errors.append(f"observation mod does not export {variable}")
+    for upgrade in BUILDING_UPGRADES.values():
+        variable = f"paradox_agent_can_upgrade_{upgrade.source}_to_{upgrade.target}"
+        if variable not in observation:
+            errors.append(f"observation mod does not export {variable}")
     if "paradox_agent_standard_district_cost_model" not in observation:
         errors.append("observation mod does not guard the standard district cost model")
     return errors
@@ -177,9 +228,13 @@ def main() -> int:
             print(f"- {error}")
         return 1
     print(f"Game catalog validation passed against: {game}")
-    print(f"Checked {len(DISTRICTS)} districts and {len(BUILDINGS)} buildings.")
+    print(
+        f"Checked {len(DISTRICTS)} districts, {len(BUILDINGS)} buildings, "
+        f"and {len(BUILDING_UPGRADES)} upgrade edges."
+    )
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
+
