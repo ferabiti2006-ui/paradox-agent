@@ -6,7 +6,7 @@ from pathlib import Path
 import json
 from unittest.mock import patch
 
-from python.paradox_agent.controller import make_decision
+from python.paradox_agent.controller import make_decision, observation_fingerprint
 from python.paradox_agent.game_adapter import (
     ADAPTER_NAME,
     AdapterError,
@@ -15,8 +15,9 @@ from python.paradox_agent.game_adapter import (
     execute_plan,
     verify_receipt_from_save,
 )
+from python.paradox_agent.planet_api import make_planet_decision
 
-from test_actions import building_observation, district_observation
+from test_actions import building_observation, district_observation, upgrade_observation
 from test_controller import observation
 
 
@@ -52,6 +53,40 @@ def build_building_state() -> dict[str, object]:
     return state
 
 
+def build_upgrade_state() -> dict[str, object]:
+    state = observation()
+    state["player"]["research"]["active"] = {
+        "physics": "tech_lasers_2",
+        "society": "tech_fleet_size",
+        "engineering": "tech_armor_2",
+    }
+    upgrade_player = upgrade_observation()["player"]
+    state["player"]["country_id"] = upgrade_player["country_id"]
+    state["player"]["resources"].update(upgrade_player["resources"])
+    state["player"]["planets"] = upgrade_player["planets"]
+    state["player"]["planets"][0]["name_key"] = "PARADOX_AGENT_TESTBED_PLANET"
+    state["player"]["planets"][0]["designation"] = "col_capital"
+    return state
+
+
+def make_upgrade_decision(state: dict[str, object]) -> dict[str, object]:
+    return make_planet_decision(
+        {
+            "schema": 1,
+            "observation_date": state["save"]["date"],
+            "state_fingerprint": observation_fingerprint(state),
+            "action": {
+                "type": "UPGRADE_BUILDING",
+                "planet_id": 4,
+                "slot": 10,
+                "expected_building": "building_research_lab_1",
+                "target_building": "building_research_lab_2",
+            },
+        },
+        state,
+    )
+
+
 def district_receipt(decision: dict[str, object]) -> dict[str, object]:
     action = decision["actions"][0]
     return {
@@ -71,6 +106,17 @@ def district_receipt(decision: dict[str, object]) -> dict[str, object]:
 
 
 class GameAdapterTests(unittest.TestCase):
+    def test_prepares_exact_semantic_building_upgrade(self) -> None:
+        state = build_upgrade_state()
+        plan = build_execution_plan(make_upgrade_decision(state), state)
+        action = plan.actions[0]
+        self.assertEqual(action.type, "UPGRADE_BUILDING")
+        self.assertEqual(action.slot, 10)
+        self.assertEqual(action.expected_building, "building_research_lab_1")
+        self.assertEqual(action.target_building, "building_research_lab_2")
+        self.assertEqual(action.building_position, 0)
+        self.assertEqual(action.building_ui_zone, "archives")
+
     def test_prepares_semantic_building_without_fixed_coordinates(self) -> None:
         state = build_building_state()
         plan = build_execution_plan(make_decision(state), state)
@@ -204,6 +250,72 @@ class GameAdapterTests(unittest.TestCase):
         driver_type.return_value.activate.assert_called_once()
         self.assertEqual(receipt["status"], "visual_verified_pending_save")
         self.assertEqual(receipt["actions"][0]["building"], "building_research_lab_1")
+
+    def test_successful_upgrade_visual_execution_is_provisional(self) -> None:
+        state = build_upgrade_state()
+        plan = build_execution_plan(make_upgrade_decision(state), state)
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "python.paradox_agent.game_adapter.WindowsStellarisDriver"
+        ) as driver_type, patch(
+            "python.paradox_agent.game_adapter.StellarisLocalizer"
+        ), patch(
+            "python.paradox_agent.game_adapter.ResearchVisualSkill"
+        ), patch(
+            "python.paradox_agent.game_adapter.DistrictVisualSkill"
+        ), patch(
+            "python.paradox_agent.game_adapter.BuildingVisualSkill"
+        ) as building_skill_type:
+            building_skill_type.return_value.upgrade.return_value = {
+                "screenshots": {"before": "before.png", "after": "after.png"},
+                "verification": {"constructing_texts": ["Constructing Research Complexes"]},
+            }
+            receipt_path = Path(directory) / "receipt.json"
+            receipt = execute_plan(plan, receipt_path)
+
+        driver_type.return_value.activate.assert_called_once()
+        building_skill_type.return_value.upgrade.assert_called_once()
+        self.assertEqual(receipt["status"], "visual_verified_pending_save")
+        self.assertEqual(receipt["actions"][0]["slot"], 10)
+        self.assertEqual(receipt["actions"][0]["target_building"], "building_research_lab_2")
+
+    def test_save_verification_requires_exact_upgraded_slot(self) -> None:
+        before = build_upgrade_state()
+        decision = make_upgrade_decision(before)
+        action = decision["actions"][0]
+        receipt = {
+            "schema": 2,
+            "adapter": ADAPTER_NAME,
+            "decision_id": decision["decision_id"],
+            "status": "visual_verified_pending_save",
+            "actions": [
+                {
+                    "type": action["type"],
+                    "planet_id": action["planet_id"],
+                    "slot": action["slot"],
+                    "expected_building": action["expected_building"],
+                    "target_building": action["target_building"],
+                    "status": "visual_verified_pending_save",
+                }
+            ],
+        }
+        after = build_upgrade_state()
+        after["save"]["date"] = "2202.01.02"
+        after["save"]["file_name"] = "after_upgrade.sav"
+        after["player"]["planets"][0]["buildings"][0]["type"] = "building_research_lab_2"
+        with tempfile.TemporaryDirectory() as directory:
+            receipt_path = Path(directory) / "receipt.json"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            verified = verify_receipt_from_save(decision, after, receipt_path)
+        self.assertEqual(verified["status"], "save_verified")
+
+        wrong = build_upgrade_state()
+        wrong["save"]["date"] = "2202.01.02"
+        wrong["save"]["file_name"] = "wrong_upgrade.sav"
+        with tempfile.TemporaryDirectory() as directory:
+            receipt_path = Path(directory) / "receipt.json"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            with self.assertRaisesRegex(AdapterError, "expected upgraded"):
+                verify_receipt_from_save(decision, wrong, receipt_path)
 
     def test_save_verification_promotes_matching_visual_receipt(self) -> None:
         before = observation()
@@ -405,3 +517,4 @@ class GameAdapterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
