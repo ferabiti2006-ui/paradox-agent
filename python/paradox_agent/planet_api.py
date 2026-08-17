@@ -25,7 +25,12 @@ from .planet_catalog import BUILDINGS
 
 
 PLANET_API_SCHEMA = 1
-PLANET_ACTION_TYPES = ("WAIT", "BUILD_DISTRICT", "BUILD_BUILDING")
+PLANET_ACTION_TYPES = (
+    "WAIT",
+    "BUILD_DISTRICT",
+    "BUILD_BUILDING",
+    "UPGRADE_BUILDING",
+)
 
 
 class PlanetApiError(ValueError):
@@ -61,6 +66,31 @@ def legal_planet_actions(
         candidates.append(
             {"type": "BUILD_BUILDING", "planet_id": planet_id, "building": building}
         )
+    planet = _planet(state, planet_id)
+    buildings = planet.get("buildings")
+    if isinstance(buildings, list):
+        for building in buildings:
+            if not isinstance(building, Mapping):
+                continue
+            slot = building.get("id")
+            source = building.get("type")
+            options = building.get("possible_upgrades")
+            if not isinstance(slot, int) or isinstance(slot, bool) or not isinstance(source, str):
+                continue
+            if not isinstance(options, list):
+                continue
+            for option in options:
+                target = option.get("target") if isinstance(option, Mapping) else None
+                if isinstance(target, str):
+                    candidates.append(
+                        {
+                            "type": "UPGRADE_BUILDING",
+                            "planet_id": planet_id,
+                            "slot": slot,
+                            "expected_building": source,
+                            "target_building": target,
+                        }
+                    )
 
     legal: list[dict[str, Any]] = []
     for candidate in candidates:
@@ -102,14 +132,34 @@ def normalize_planet(
             definition = BUILDINGS.get(building_id) if isinstance(building_id, str) else None
             if definition is None:
                 continue
+            observed_options = row.get("possible_upgrades")
+            options_by_target = {
+                option.get("target"): option
+                for option in observed_options
+                if isinstance(option, Mapping) and isinstance(option.get("target"), str)
+            } if isinstance(observed_options, list) else {}
             for target in definition.upgrades:
+                option = options_by_target.get(target)
                 upgrade_rows.append(
                     {
-                        "slot": row.get("position"),
+                        "slot": row.get("id"),
+                        "position": row.get("position"),
+                        "ui_zone": row.get("ui_zone", definition.ui_zone),
                         "current_building": building_id,
                         "target_building": target,
-                        "supported": False,
-                        "reason": "UPGRADE_BUILDING visual targeting is not calibrated",
+                        "cost": option.get("cost") if isinstance(option, Mapping) else None,
+                        "prerequisites": option.get("prerequisites", [])
+                        if isinstance(option, Mapping)
+                        else [],
+                        "requirements_met": option.get("requirements_met")
+                        if isinstance(option, Mapping)
+                        else None,
+                        "authoritative": option.get("authoritative") is True
+                        if isinstance(option, Mapping)
+                        else False,
+                        "legal": option.get("upgradeable") is True
+                        if isinstance(option, Mapping)
+                        else False,
                     }
                 )
 
@@ -384,3 +434,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
