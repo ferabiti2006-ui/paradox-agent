@@ -304,6 +304,41 @@ class BuildingScreenAnalyzerTests(unittest.TestCase):
         with self.assertRaisesRegex(VisualSkillError, "empty building slot"):
             self.analyzer.locate_empty_building_slot("Axiom Prime", self.base, image)
 
+    def test_locates_exact_occupied_zone_position_and_rejects_empty_target(self) -> None:
+        from PIL import Image, ImageDraw
+
+        image = Image.new("RGB", (1920, 1080), (10, 15, 18))
+        draw = ImageDraw.Draw(image)
+        # Archives position 2 is visibly empty; position 0 is occupied.
+        draw.rectangle((797, 560, 807, 564), fill=(20, 235, 205))
+        draw.rectangle((800, 555, 804, 569), fill=(20, 235, 205))
+        lines = self.base + (line("Archives", 536, 562),)
+        coordinate, evidence = self.analyzer.locate_occupied_building_slot(
+            "Axiom Prime", "archives", 0, lines, image
+        )
+        self.assertEqual(coordinate, (672, 562))
+        self.assertEqual(evidence["zone"], "archives")
+        with self.assertRaisesRegex(VisualSkillError, "visibly empty"):
+            self.analyzer.locate_occupied_building_slot(
+                "Axiom Prime", "archives", 2, lines, image
+            )
+
+    def test_requires_exact_building_details_before_upgrade(self) -> None:
+        lines = self.base + (
+            line("Building Details", 1720, 168),
+            line("Research Labs", 1660, 328),
+            line("Upgrade", 1660, 224),
+        )
+        coordinate, evidence = self.analyzer.locate_upgrade_control(
+            "Axiom Prime", "Research Labs", lines
+        )
+        self.assertEqual(coordinate, (1660, 224))
+        self.assertEqual(evidence["current_building_text"], "Research Labs")
+        with self.assertRaisesRegex(VisualSkillError, "do not uniquely identify"):
+            self.analyzer.locate_upgrade_control(
+                "Axiom Prime", "Alloy Foundries", lines
+            )
+
     def test_locates_unique_building_option(self) -> None:
         lines = self.base + (
             line("Construct Building", 1750, 168),
@@ -397,6 +432,54 @@ class BuildingScreenAnalyzerTests(unittest.TestCase):
         self.assertEqual(evidence["slot_coordinate"], [500, 560])
         self.assertEqual(len(evidence["screenshots"]["slot_probes"]), 2)
 
+    def test_visual_skill_confirms_details_before_upgrade_click(self) -> None:
+        from PIL import Image
+
+        driver = Mock()
+        driver.capture_client_image.return_value = Image.new("RGB", (1920, 1080))
+        reader = Mock()
+        reader.read.return_value = self.base
+        localizer = Mock()
+        localizer.resolve.side_effect = lambda identifier: {
+            "planet_key": "Axiom Prime",
+            "designation_key": "Empire Capital",
+            "building_research_lab_1": "Research Labs",
+            "building_research_lab_2": "Research Complexes",
+        }[identifier]
+        with tempfile.TemporaryDirectory() as directory:
+            skill = BuildingVisualSkill(
+                driver, directory, localizer=localizer, reader=reader
+            )
+            analyzer = Mock(spec=BuildingScreenAnalyzer)
+            analyzer.locate_occupied_building_slot.return_value = (
+                (664, 566),
+                {"zone": "archives", "position": 0},
+            )
+            analyzer.locate_upgrade_control.return_value = (
+                (1660, 224),
+                {"current_building_text": "Research Labs", "upgrade_text": "Upgrade"},
+            )
+            analyzer.verify_building_queued.return_value = {
+                "verification_kind": "constructing_status"
+            }
+            skill.analyzer = analyzer
+            evidence = skill.upgrade(
+                action_index=0,
+                planet_name_key="planet_key",
+                planet_designation_key="designation_key",
+                position=0,
+                ui_zone="archives",
+                expected_building_id="building_research_lab_1",
+                target_building_id="building_research_lab_2",
+                observation_date="2202.08.14",
+            )
+
+        self.assertEqual(
+            [call.args[0] for call in driver.click_client.call_args_list],
+            [(664, 566), (1660, 224)],
+        )
+        self.assertEqual(evidence["target_building_name"], "Research Complexes")
+
 
 class InstalledGameIntegrationTests(unittest.TestCase):
     def test_resolves_real_446_technology_localisation(self) -> None:
@@ -415,10 +498,17 @@ class InstalledGameIntegrationTests(unittest.TestCase):
         game = Path(r"C:\Program Files (x86)\Steam\steamapps\common\Stellaris")
         if not game.is_dir():
             self.skipTest("Stellaris installation is not available")
-        from python.paradox_agent.planet_catalog import BUILDING_TYPES, DISTRICT_TYPES
+        from python.paradox_agent.planet_catalog import (
+            BUILDING_TYPES,
+            BUILDING_UPGRADE_TARGETS,
+            DISTRICT_TYPES,
+        )
 
         localizer = StellarisLocalizer(game)
-        labels = [localizer.resolve(identifier) for identifier in DISTRICT_TYPES + BUILDING_TYPES]
+        labels = [
+            localizer.resolve(identifier)
+            for identifier in DISTRICT_TYPES + BUILDING_TYPES + BUILDING_UPGRADE_TARGETS
+        ]
         self.assertEqual(len(labels), len(set(labels)))
 
     def test_reads_and_calibrates_recorded_stellaris_screens(self) -> None:
@@ -453,6 +543,30 @@ class InstalledGameIntegrationTests(unittest.TestCase):
         self.assertTrue(900 <= target[0] <= 1000)
         self.assertTrue(285 <= target[1] <= 325)
         self.assertGreater(evidence["target_ocr_confidence"], 0.95)
+
+    def test_calibrates_exact_occupied_slot_on_recorded_planet_screen(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        screen = (
+            root
+            / "runtime"
+            / "execution_receipts"
+            / "9e73bfe3a7f14cc893a42d10_visual"
+            / "00_building_before.png"
+        )
+        if not screen.is_file():
+            self.skipTest("recorded 4.4.6 planet screen is not available")
+        try:
+            from PIL import Image
+
+            image = Image.open(screen)
+            lines = RapidOcrReader().read(image)
+        except (ImportError, OSError, VisualSkillError) as error:
+            self.skipTest(str(error))
+        coordinate, evidence = BuildingScreenAnalyzer().locate_occupied_building_slot(
+            "Axiom Prime", "archives", 0, lines, image
+        )
+        self.assertEqual(coordinate, (664, 566))
+        self.assertEqual(evidence["zone_label"], "Archives")
 
 
 if __name__ == "__main__":
