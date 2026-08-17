@@ -45,7 +45,8 @@
           { "$ref": "#/$defs/waitAction" },
           { "$ref": "#/$defs/chooseResearchAction" },
           { "$ref": "#/$defs/buildDistrictAction" },
-          { "$ref": "#/$defs/buildBuildingAction" }
+          { "$ref": "#/$defs/buildBuildingAction" },
+          { "$ref": "#/$defs/upgradeBuildingAction" }
         ]
       }
     },
@@ -134,6 +135,33 @@
           ]
         }
       }
+    },
+    "upgradeBuildingAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "planet_id", "slot", "expected_building", "target_building"],
+      "properties": {
+        "type": { "const": "UPGRADE_BUILDING" },
+        "planet_id": { "type": "integer", "minimum": 0 },
+        "slot": { "type": "integer", "minimum": 0 },
+        "expected_building": {
+          "enum": [
+            "building_research_lab_1",
+            "building_holo_theatres",
+            "building_foundry_1",
+            "building_factory_1"
+          ]
+        },
+        "target_building": {
+          "enum": [
+            "building_research_lab_2",
+            "building_hyper_entertainment_forum",
+            "building_foundry_2",
+            "building_factory_2"
+          ]
+        }
+      }
     }
   }
 }
+

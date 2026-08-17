@@ -71,7 +71,9 @@ V1 permits `CHOOSE_RESEARCH` for an idle area and a technology listed in
 the relevant save alternatives, one fail-closed catalog-backed `BUILD_BUILDING` or
 `BUILD_DISTRICT` for a verified owned colony, plus `WAIT` for 1–12 months. The
 machine-readable contract is
-`schemas/action_decision.schema.json`. Unknown action types and fields are
+`schemas/action_decision.schema.json`. The planetary API also permits exact,
+allow-listed `UPGRADE_BUILDING` requests when a save contains authoritative
+upgrade observations. Unknown action types and fields are
 rejected, so a future model cannot emit arbitrary console commands. Decisions
 are marked `not_executed` until the game-action adapter handles them. Run
 continuously alongside the save watcher with:
@@ -146,6 +148,17 @@ is recognized, and then requires an explicit constructing status.
 Final success still requires a subsequent save whose construction item resolves
 to the exact building ID. Unsupported empire/planet cost models fail closed.
 
+For upgrades, the controller uses the save building instance ID as `slot` and
+requires the exact expected current building and target edge. The catalog pins
+four tier-one to tier-two upgrade definitions, including strategic-resource
+costs and technologies, while the testbed mod exports conservative per-planet
+legality flags. The visual skill establishes the correct planet, date, zone,
+and zone-relative occupied position; rejects a visible empty slot; opens
+Building Details; confirms the exact localized current building; and only then
+clicks a unique Upgrade control. A later save must show the target type in the
+same authoritative building instance before the receipt becomes
+`save_verified`.
+
 ## Normalized Planetary Action API
 
 `planet_api.py` exposes concise owned-planet snapshots, exact legal action
@@ -187,3 +200,4 @@ receipt blocks a repeat attempt. A successful action is marked
   runtime\proposed_decision.json runtime\current_state.json `
   --verify-save --receipt runtime\execution_receipts\DECISION_ID.json
 ```
+

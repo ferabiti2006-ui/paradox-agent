@@ -22,6 +22,7 @@ def api_observation() -> dict[str, object]:
     construction = building_observation()["player"]
     state["player"]["country_id"] = construction["country_id"]
     state["player"]["resources"]["minerals"] = 1200
+    state["player"]["resources"]["exotic_gases"] = 100
     state["player"]["planets"] = construction["planets"]
     planet = state["player"]["planets"][0]
     planet.update(
@@ -47,7 +48,23 @@ def api_observation() -> dict[str, object]:
             "stability": 70,
             "crime": 0,
             "buildings": [
-                {"id": 10, "type": "building_research_lab_1", "position": 2}
+                {
+                    "id": 10,
+                    "type": "building_research_lab_1",
+                    "position": 2,
+                    "ui_zone": "archives",
+                    "possible_upgrades": [
+                        {
+                            "source": "building_research_lab_1",
+                            "target": "building_research_lab_2",
+                            "upgradeable": True,
+                            "authoritative": True,
+                            "requirements_met": True,
+                            "prerequisites": ["tech_basic_science_lab_2"],
+                            "cost": {"minerals": 600, "exotic_gases": 50},
+                        }
+                    ],
+                }
             ],
             "district_counts": {
                 "district_city": 2,
@@ -80,7 +97,8 @@ class PlanetApiTests(unittest.TestCase):
         schema = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(schema["properties"]["schema"]["const"], 1)
         self.assertFalse(schema["additionalProperties"])
-        self.assertEqual(len(schema["properties"]["action"]["oneOf"]), 3)
+        self.assertEqual(len(schema["properties"]["action"]["oneOf"]), 4)
+        self.assertFalse(schema["$defs"]["upgradeBuilding"]["additionalProperties"])
 
     def test_legal_actions_are_exact_validator_inputs(self) -> None:
         actions = legal_planet_actions(api_observation(), 4)
@@ -93,6 +111,16 @@ class PlanetApiTests(unittest.TestCase):
             actions,
         )
         self.assertEqual(actions[-1], {"type": "WAIT", "months": 1})
+        self.assertIn(
+            {
+                "type": "UPGRADE_BUILDING",
+                "planet_id": 4,
+                "slot": 10,
+                "expected_building": "building_research_lab_1",
+                "target_building": "building_research_lab_2",
+            },
+            actions,
+        )
         self.assertNotIn("building_cheat", str(actions))
 
     def test_normalized_state_is_explicit_about_unknown_capabilities(self) -> None:
@@ -106,7 +134,9 @@ class PlanetApiTests(unittest.TestCase):
             planet["buildings"]["possible_upgrades"][0]["target_building"],
             "building_research_lab_2",
         )
-        self.assertFalse(planet["buildings"]["possible_upgrades"][0]["supported"])
+        self.assertEqual(planet["buildings"]["possible_upgrades"][0]["slot"], 10)
+        self.assertTrue(planet["buildings"]["possible_upgrades"][0]["authoritative"])
+        self.assertTrue(planet["buildings"]["possible_upgrades"][0]["legal"])
 
     def test_envelope_rejects_stale_unknown_and_extra_fields(self) -> None:
         state = api_observation()
@@ -180,3 +210,4 @@ class PlanetApiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

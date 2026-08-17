@@ -7,13 +7,20 @@ from typing import Any, Mapping, Sequence
 
 from .planet_catalog import (
     BUILDING_TYPES,
+    BUILDING_UPGRADES,
     DISTRICT_TYPES,
 )
 
 
 ACTION_SCHEMA = 1
 RESEARCH_AREAS = ("physics", "society", "engineering")
-SUPPORTED_ACTIONS = ("WAIT", "CHOOSE_RESEARCH", "BUILD_DISTRICT", "BUILD_BUILDING")
+SUPPORTED_ACTIONS = (
+    "WAIT",
+    "CHOOSE_RESEARCH",
+    "BUILD_DISTRICT",
+    "BUILD_BUILDING",
+    "UPGRADE_BUILDING",
+)
 
 
 class ActionValidationError(ValueError):
@@ -87,6 +94,20 @@ def _building_option(planet: Mapping[str, Any], building: str) -> Mapping[str, A
         return None
     option = availability.get(building)
     return option if isinstance(option, Mapping) else None
+
+
+def _building_instance(
+    planet: Mapping[str, Any], slot: int
+) -> Mapping[str, Any] | None:
+    buildings = planet.get("buildings")
+    if not isinstance(buildings, list):
+        return None
+    matches = [
+        row
+        for row in buildings
+        if isinstance(row, Mapping) and row.get("id") == slot
+    ]
+    return matches[0] if len(matches) == 1 else None
 
 
 def _validate_resource_cost(
@@ -231,6 +252,103 @@ def _validate_build_building(
     return errors, parameters
 
 
+def _validate_upgrade_building(
+    proposed: Mapping[str, Any], observation: Mapping[str, Any]
+) -> tuple[list[str], dict[str, Any]]:
+    required = {
+        "type",
+        "planet_id",
+        "slot",
+        "expected_building",
+        "target_building",
+    }
+    errors = _exact_keys(proposed, required)
+    parameters: dict[str, Any] = {}
+    planet_id = proposed.get("planet_id")
+    slot = proposed.get("slot")
+    expected = proposed.get("expected_building")
+    target = proposed.get("target_building")
+
+    if not isinstance(planet_id, int) or isinstance(planet_id, bool) or planet_id < 0:
+        errors.append("planet_id must be a non-negative integer")
+    else:
+        parameters["planet_id"] = planet_id
+    if not isinstance(slot, int) or isinstance(slot, bool) or slot < 0:
+        errors.append("slot must be a non-negative authoritative building ID")
+    else:
+        parameters["slot"] = slot
+    if not isinstance(expected, str) or not expected:
+        errors.append("expected_building must be a non-empty string")
+    else:
+        parameters["expected_building"] = expected
+    if not isinstance(target, str) or not target:
+        errors.append("target_building must be a non-empty string")
+    else:
+        parameters["target_building"] = target
+
+    upgrade = BUILDING_UPGRADES.get((expected, target))
+    if isinstance(expected, str) and isinstance(target, str) and upgrade is None:
+        errors.append(f"unsupported building upgrade path {expected!r} -> {target!r}")
+
+    planet = _planet(observation, planet_id) if isinstance(planet_id, int) else None
+    if planet is None:
+        errors.append(f"planet {planet_id!r} is not a known player colony")
+        return errors, parameters
+
+    player = observation.get("player")
+    player_id = player.get("country_id") if isinstance(player, Mapping) else None
+    if not isinstance(player_id, int) or planet.get("owner_id") != player_id:
+        errors.append(f"planet {planet_id!r} is not owned by the player")
+
+    queue = planet.get("construction_queue")
+    if not isinstance(queue, Mapping) or queue.get("known") is not True:
+        errors.append("planet construction queue is not established confidently")
+    elif queue.get("safe_to_build") is not True:
+        if isinstance(target, str) and target in str(queue.get("details", {})):
+            errors.append("requested building upgrade is already represented in the construction queue")
+        else:
+            errors.append("planet construction queue is not empty and safe")
+
+    instance = _building_instance(planet, slot) if isinstance(slot, int) else None
+    if instance is None:
+        errors.append(f"slot {slot!r} is not one unique building instance on planet {planet_id!r}")
+        return errors, parameters
+    if instance.get("type") != expected:
+        errors.append(
+            f"slot {slot!r} contains {instance.get('type')!r}, not expected building {expected!r}"
+        )
+        return errors, parameters
+    if not isinstance(instance.get("position"), int) or isinstance(instance.get("position"), bool):
+        errors.append(f"zone-relative position for slot {slot!r} is not established confidently")
+
+    options = instance.get("possible_upgrades")
+    option = next(
+        (
+            row
+            for row in options
+            if isinstance(row, Mapping)
+            and row.get("source") == expected
+            and row.get("target") == target
+        ),
+        None,
+    ) if isinstance(options, list) else None
+    if option is None or option.get("authoritative") is not True:
+        errors.append(
+            f"upgrade legality for slot {slot!r} to {target!r} is not established confidently"
+        )
+    else:
+        if option.get("requirements_met") is False:
+            errors.append(
+                f"technology requirements for {target!r} are not met: {option.get('prerequisites')!r}"
+            )
+        if option.get("upgradeable") is not True:
+            errors.append(
+                f"building {expected!r} in slot {slot!r} cannot legally upgrade to {target!r}"
+            )
+        errors.extend(_validate_resource_cost(target, option.get("cost"), player))
+    return errors, parameters
+
+
 def validate_action(
     proposed: Mapping[str, Any], observation: Mapping[str, Any]
 ) -> ValidatedAction:
@@ -277,6 +395,10 @@ def validate_action(
         building_errors, parameters = _validate_build_building(proposed, observation)
         errors.extend(building_errors)
 
+    elif action_type == "UPGRADE_BUILDING":
+        upgrade_errors, parameters = _validate_upgrade_building(proposed, observation)
+        errors.extend(upgrade_errors)
+
     if errors:
         raise ActionValidationError(errors)
     return ValidatedAction(action_type, parameters)
@@ -310,6 +432,8 @@ def validate_actions(
         errors.append("BUILD_DISTRICT must be the only action in a decision")
     if "BUILD_BUILDING" in types and len(validated) != 1:
         errors.append("BUILD_BUILDING must be the only action in a decision")
+    if "UPGRADE_BUILDING" in types and len(validated) != 1:
+        errors.append("UPGRADE_BUILDING must be the only action in a decision")
     areas = [action.parameters["area"] for action in validated if action.type == "CHOOSE_RESEARCH"]
     if len(areas) != len(set(areas)):
         errors.append("a decision cannot choose research twice for the same area")
@@ -317,3 +441,4 @@ def validate_actions(
     if errors:
         raise ActionValidationError(errors)
     return validated
+

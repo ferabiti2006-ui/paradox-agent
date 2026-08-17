@@ -218,6 +218,85 @@ paradox_agent_export_observation = {
 			}
 			set_variable = { which = paradox_agent_can_build_building_bureaucratic_1 value = 1 }
 		}
+		# Restricted UPGRADE_BUILDING catalog. These flags mirror the target
+		# building potential and prerequisite while exact source instances are
+		# read from the save. Upgrade affordability and the shared planet queue
+		# remain authoritative controller checks.
+		set_variable = { which = paradox_agent_can_upgrade_building_research_lab_1_to_building_research_lab_2 value = 0 }
+		if = {
+			limit = {
+				has_building = building_research_lab_1
+				NOR = {
+					has_modifier = resort_colony
+					has_modifier = slave_colony
+					has_modifier = penal_colony
+				}
+				exists = owner
+				owner = {
+					is_wilderness_empire = no
+					is_nomadic = no
+					is_ai = no
+					has_technology = tech_basic_science_lab_2
+				}
+				is_special_colony_type = no
+			}
+			set_variable = { which = paradox_agent_can_upgrade_building_research_lab_1_to_building_research_lab_2 value = 1 }
+		}
+		set_variable = { which = paradox_agent_can_upgrade_building_holo_theatres_to_building_hyper_entertainment_forum value = 0 }
+		if = {
+			limit = {
+				has_building = building_holo_theatres
+				exists = owner
+				NOR = {
+					has_modifier = slave_colony
+					has_modifier = penal_colony
+				}
+				owner = {
+					is_regular_empire = yes
+					is_nomadic = no
+					is_ai = no
+					NOT = { has_valid_civic = civic_dystopian_society }
+					has_technology = tech_hyper_entertainment_forum
+				}
+			}
+			set_variable = { which = paradox_agent_can_upgrade_building_holo_theatres_to_building_hyper_entertainment_forum value = 1 }
+		}
+		set_variable = { which = paradox_agent_can_upgrade_building_foundry_1_to_building_foundry_2 value = 0 }
+		if = {
+			limit = {
+				has_building = building_foundry_1
+				NOR = {
+					has_modifier = resort_colony
+					has_modifier = slave_colony
+				}
+				exists = owner
+				owner = {
+					is_wilderness_empire = no
+					is_nomadic = no
+					is_ai = no
+					has_technology = tech_alloys_1
+				}
+			}
+			set_variable = { which = paradox_agent_can_upgrade_building_foundry_1_to_building_foundry_2 value = 1 }
+		}
+		set_variable = { which = paradox_agent_can_upgrade_building_factory_1_to_building_factory_2 value = 0 }
+		if = {
+			limit = {
+				has_building = building_factory_1
+				exists = owner
+				NOR = {
+					has_modifier = resort_colony
+					has_modifier = slave_colony
+				}
+				owner = {
+					country_uses_consumer_goods = yes
+					is_nomadic = no
+					is_ai = no
+					has_technology = tech_luxuries_1
+				}
+			}
+			set_variable = { which = paradox_agent_can_upgrade_building_factory_1_to_building_factory_2 value = 1 }
+		}
 		export_trigger_value_to_variable = {
 			trigger = num_buildings
 			parameters = { type = any disabled = any in_construction = no }
@@ -305,3 +384,4 @@ paradox_agent_export_observation = {
 		log = "PARADOX_AGENT|STARBASE|name=\\[This.GetName]|system=\\[This.GetStarName]|class=\\[This.GetShipSizeName]|modules=\\[Root.paradox_agent_modules]|modules_with_construction=\\[Root.paradox_agent_modules_with_construction]|buildings=\\[Root.paradox_agent_starbase_buildings]|buildings_with_construction=\\[Root.paradox_agent_starbase_buildings_with_construction]"
 	}
 }
+

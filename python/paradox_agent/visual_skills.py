@@ -581,6 +581,16 @@ class DistrictVisualSkill:
 class BuildingScreenAnalyzer(DistrictScreenAnalyzer):
     """Ground one allow-listed planetary building in OCR and image evidence."""
 
+    _ZONE_LAYOUTS = {
+        # Offsets are from the uniquely recognized ``Districts and
+        # Buildings`` anchor at the pinned 1920x1080, GUI-scale-1.0 layout.
+        # Fixed geometry is used only after that panel and the expected zone
+        # label have both been visually established.
+        "city": ("City Districts", 29, 103, 3, 6),
+        "archives": ("Archives", 422, 102, 3, 3),
+        "mixed_industry": ("Mixed Industry", 422, 168, 3, 3),
+    }
+
     def locate_empty_building_slots(
         self,
         planet_name: str,
@@ -727,6 +737,115 @@ class BuildingScreenAnalyzer(DistrictScreenAnalyzer):
         )
         target = candidates[0]
         return target, {**evidence, "target_center": list(target)}
+
+    def locate_occupied_building_slot(
+        self,
+        planet_name: str,
+        ui_zone: str,
+        position: int,
+        lines: Sequence[OcrLine],
+        image: Any,
+    ) -> tuple[tuple[int, int], dict[str, Any]]:
+        """Locate one exact zone-relative occupied slot and reject empties."""
+
+        self.require_planet_screen(planet_name, lines)
+        layout = self._ZONE_LAYOUTS.get(ui_zone)
+        if layout is None:
+            raise VisualSkillError(f"unsupported building UI zone {ui_zone!r}")
+        label, offset_x, offset_y, columns, capacity = layout
+        if not isinstance(position, int) or isinstance(position, bool) or not 0 <= position < capacity:
+            raise VisualSkillError(
+                f"building position {position!r} is outside calibrated {label!r} capacity"
+            )
+        anchors = tuple(
+            line
+            for line in self._matches(lines, "Districts and Buildings")
+            if line.center[0] < 1200
+        )
+        zone_labels = tuple(
+            line for line in self._matches(lines, label) if line.center[0] < 900
+        )
+        if len(anchors) != 1:
+            raise VisualSkillError(
+                f"expected one Districts and Buildings anchor; found {len(anchors)}"
+            )
+        if len(zone_labels) != 1:
+            raise VisualSkillError(f"expected one {label!r} zone label; found {len(zone_labels)}")
+        row, column = divmod(position, columns)
+        target = (
+            anchors[0].center[0] + offset_x + column * 65,
+            anchors[0].center[1] + offset_y + row * 65,
+        )
+        width, height = image.size
+        if not 0 <= target[0] < width or not 0 <= target[1] < height:
+            raise VisualSkillError("calibrated building slot is outside the client image")
+        try:
+            empty_slots, empty_evidence = self.locate_empty_building_slots(
+                planet_name, lines, image
+            )
+        except VisualSkillError as error:
+            if "no visually grounded empty building slot" not in str(error):
+                raise
+            empty_slots = ()
+            empty_evidence = {"slot_candidates": []}
+        if any(abs(x - target[0]) <= 14 and abs(y - target[1]) <= 14 for x, y in empty_slots):
+            raise VisualSkillError(
+                f"calibrated {label!r} position {position} is visibly empty"
+            )
+        return target, {
+            "panel_anchor": anchors[0].text,
+            "panel_anchor_center": list(anchors[0].center),
+            "zone": ui_zone,
+            "zone_label": zone_labels[0].text,
+            "zone_label_center": list(zone_labels[0].center),
+            "position": position,
+            "target_center": list(target),
+            "empty_slot_evidence": empty_evidence,
+        }
+
+    def locate_upgrade_control(
+        self,
+        planet_name: str,
+        current_building_name: str,
+        lines: Sequence[OcrLine],
+    ) -> tuple[tuple[int, int], dict[str, Any]]:
+        """Require exact building details before returning the Upgrade control."""
+
+        self.require_planet_screen(planet_name, lines)
+        detail_anchors = tuple(
+            line for line in self._matches(lines, "Building Details") if line.center[0] > 1500
+        )
+        building_labels = tuple(
+            line
+            for line in self._matches(lines, current_building_name)
+            if line.center[0] > 1500
+        )
+        upgrade_buttons = tuple(
+            line for line in self._matches(lines, "Upgrade") if line.center[0] > 1500
+        )
+        if len(detail_anchors) != 1:
+            raise VisualSkillError(
+                f"expected one Building Details anchor; found {len(detail_anchors)}"
+            )
+        if len(building_labels) != 1:
+            raise VisualSkillError(
+                f"building details do not uniquely identify {current_building_name!r}; "
+                f"found {len(building_labels)} labels"
+            )
+        if len(upgrade_buttons) != 1:
+            raise VisualSkillError(
+                f"expected one visible Upgrade control for {current_building_name!r}; "
+                f"found {len(upgrade_buttons)}"
+            )
+        return upgrade_buttons[0].center, {
+            "details_text": detail_anchors[0].text,
+            "details_center": list(detail_anchors[0].center),
+            "current_building_text": building_labels[0].text,
+            "current_building_confidence": round(building_labels[0].confidence, 5),
+            "upgrade_text": upgrade_buttons[0].text,
+            "upgrade_confidence": round(upgrade_buttons[0].confidence, 5),
+            "upgrade_center": list(upgrade_buttons[0].center),
+        }
 
     def require_building_dialog(
         self, planet_name: str, lines: Sequence[OcrLine]
@@ -964,6 +1083,110 @@ class BuildingVisualSkill:
             },
             "slot_evidence": slot_evidence,
             "target_evidence": target_evidence,
+            "verification": verification,
+        }
+
+    def upgrade(
+        self,
+        *,
+        action_index: int,
+        planet_name_key: str,
+        planet_designation_key: str,
+        position: int,
+        ui_zone: str,
+        expected_building_id: str,
+        target_building_id: str,
+        observation_date: str,
+        before_click: Callable[[str, tuple[int, int], dict[str, Any]], None] | None = None,
+    ) -> dict[str, Any]:
+        prefix = f"{action_index:02d}_building_upgrade"
+        planet_name = self.localizer.resolve(planet_name_key)
+        planet_designation = self.localizer.resolve(planet_designation_key)
+        expected_name = self.localizer.resolve(expected_building_id)
+        target_name = self.localizer.resolve(target_building_id)
+
+        initial_lines, initial_path, _ = self._observe(f"{prefix}_initial")
+        self.analyzer.require_game_date(initial_lines, observation_date)
+        try:
+            self.analyzer.require_planet_screen(planet_name, initial_lines)
+            selected_path = initial_path
+            opened_from_outliner = False
+        except VisualSkillError:
+            coordinate = self.analyzer.locate_planet_in_outliner(
+                planet_name, planet_designation, initial_lines
+            )
+            if before_click is not None:
+                before_click(
+                    "select_planet",
+                    coordinate,
+                    {
+                        "initial_screenshot": initial_path,
+                        "planet_name": planet_name,
+                        "planet_designation": planet_designation,
+                    },
+                )
+            self.driver.click_client(coordinate)
+            selected_lines, selected_path, _ = self._observe(f"{prefix}_planet_selected")
+            self.analyzer.require_game_date(selected_lines, observation_date)
+            self.analyzer.require_planet_screen(planet_name, selected_lines)
+            opened_from_outliner = True
+
+        before_lines, before_path, before_image = self._observe(f"{prefix}_before")
+        self.analyzer.require_game_date(before_lines, observation_date)
+        slot, slot_evidence = self.analyzer.locate_occupied_building_slot(
+            planet_name, ui_zone, position, before_lines, before_image
+        )
+        if before_click is not None:
+            before_click(
+                "select_building_slot",
+                slot,
+                {
+                    "before_screenshot": before_path,
+                    "expected_building_name": expected_name,
+                    "slot_evidence": slot_evidence,
+                },
+            )
+        self.driver.click_client(slot)
+
+        details_lines, details_path, _ = self._observe(f"{prefix}_details")
+        self.analyzer.require_game_date(details_lines, observation_date)
+        upgrade, detail_evidence = self.analyzer.locate_upgrade_control(
+            planet_name, expected_name, details_lines
+        )
+        if before_click is not None:
+            before_click(
+                "upgrade_building",
+                upgrade,
+                {
+                    "details_screenshot": details_path,
+                    "expected_building_name": expected_name,
+                    "target_building_name": target_name,
+                    "detail_evidence": detail_evidence,
+                },
+            )
+        self.driver.click_client(upgrade)
+
+        after_lines, after_path, _ = self._observe(f"{prefix}_after")
+        self.analyzer.require_game_date(after_lines, observation_date)
+        verification = self.analyzer.verify_building_queued(
+            planet_name, target_name, after_lines
+        )
+        return {
+            "planet_name": planet_name,
+            "expected_building_name": expected_name,
+            "target_building_name": target_name,
+            "opened_from_outliner": opened_from_outliner,
+            "slot_coordinate": list(slot),
+            "upgrade_coordinate": list(upgrade),
+            "screenshots": {
+                "initial": initial_path,
+                "planet_selected": selected_path,
+                "before": before_path,
+                "details": details_path,
+                "after": after_path,
+            },
+            "slot_evidence": slot_evidence,
+            "detail_evidence": detail_evidence,
             "verification": verification,
         }
 

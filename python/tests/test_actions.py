@@ -81,6 +81,31 @@ def building_observation() -> dict[str, object]:
     return state
 
 
+def upgrade_observation() -> dict[str, object]:
+    state = building_observation()
+    state["player"]["resources"].update({"minerals": 1000, "exotic_gases": 75})
+    state["player"]["planets"][0]["buildings"] = [
+        {
+            "id": 10,
+            "type": "building_research_lab_1",
+            "position": 0,
+            "ui_zone": "archives",
+            "possible_upgrades": [
+                {
+                    "source": "building_research_lab_1",
+                    "target": "building_research_lab_2",
+                    "upgradeable": True,
+                    "authoritative": True,
+                    "requirements_met": True,
+                    "prerequisites": ["tech_basic_science_lab_2"],
+                    "cost": {"minerals": 600, "exotic_gases": 50},
+                }
+            ],
+        }
+    ]
+    return state
+
+
 class ActionValidationTests(unittest.TestCase):
     def test_action_schema_is_valid_json_and_disallows_unknown_fields(self) -> None:
         schema_path = Path(__file__).parents[1] / "schemas" / "action_decision.schema.json"
@@ -91,6 +116,110 @@ class ActionValidationTests(unittest.TestCase):
         self.assertFalse(schema["$defs"]["chooseResearchAction"]["additionalProperties"])
         self.assertFalse(schema["$defs"]["buildDistrictAction"]["additionalProperties"])
         self.assertFalse(schema["$defs"]["buildBuildingAction"]["additionalProperties"])
+        self.assertFalse(schema["$defs"]["upgradeBuildingAction"]["additionalProperties"])
+
+    def test_accepts_exact_authoritative_building_upgrade(self) -> None:
+        action = validate_actions(
+            [
+                {
+                    "type": "UPGRADE_BUILDING",
+                    "planet_id": 4,
+                    "slot": 10,
+                    "expected_building": "building_research_lab_1",
+                    "target_building": "building_research_lab_2",
+                }
+            ],
+            upgrade_observation(),
+        )[0]
+        self.assertEqual(action.parameters["slot"], 10)
+        self.assertEqual(action.parameters["target_building"], "building_research_lab_2")
+
+    def test_rejects_unknown_upgrade_path_and_extra_fields(self) -> None:
+        state = upgrade_observation()
+        with self.assertRaisesRegex(ActionValidationError, "unsupported building upgrade path"):
+            validate_actions(
+                [
+                    {
+                        "type": "UPGRADE_BUILDING",
+                        "planet_id": 4,
+                        "slot": 10,
+                        "expected_building": "building_research_lab_1",
+                        "target_building": "building_factory_2",
+                    }
+                ],
+                state,
+            )
+        with self.assertRaisesRegex(ActionValidationError, "unknown field 'click_coordinate'"):
+            validate_actions(
+                [
+                    {
+                        "type": "UPGRADE_BUILDING",
+                        "planet_id": 4,
+                        "slot": 10,
+                        "expected_building": "building_research_lab_1",
+                        "target_building": "building_research_lab_2",
+                        "click_coordinate": [1, 2],
+                    }
+                ],
+                state,
+            )
+
+    def test_rejects_wrong_or_missing_upgrade_slot(self) -> None:
+        state = upgrade_observation()
+        action = {
+            "type": "UPGRADE_BUILDING",
+            "planet_id": 4,
+            "slot": 10,
+            "expected_building": "building_factory_1",
+            "target_building": "building_factory_2",
+        }
+        with self.assertRaisesRegex(ActionValidationError, "not expected building"):
+            validate_actions([action], state)
+        action.update(
+            {
+                "slot": 99,
+                "expected_building": "building_research_lab_1",
+                "target_building": "building_research_lab_2",
+            }
+        )
+        with self.assertRaisesRegex(ActionValidationError, "not one unique building instance"):
+            validate_actions([action], state)
+
+    def test_rejects_unknown_or_illegal_upgrade_legality(self) -> None:
+        state = upgrade_observation()
+        option = state["player"]["planets"][0]["buildings"][0]["possible_upgrades"][0]
+        option["authoritative"] = False
+        with self.assertRaisesRegex(ActionValidationError, "not established confidently"):
+            validate_actions(
+                [{"type": "UPGRADE_BUILDING", "planet_id": 4, "slot": 10,
+                  "expected_building": "building_research_lab_1",
+                  "target_building": "building_research_lab_2"}],
+                state,
+            )
+        option.update({"authoritative": True, "upgradeable": False, "requirements_met": False})
+        with self.assertRaisesRegex(ActionValidationError, "technology requirements"):
+            validate_actions(
+                [{"type": "UPGRADE_BUILDING", "planet_id": 4, "slot": 10,
+                  "expected_building": "building_research_lab_1",
+                  "target_building": "building_research_lab_2"}],
+                state,
+            )
+
+    def test_rejects_unaffordable_or_queued_upgrade(self) -> None:
+        state = upgrade_observation()
+        action = {"type": "UPGRADE_BUILDING", "planet_id": 4, "slot": 10,
+                  "expected_building": "building_research_lab_1",
+                  "target_building": "building_research_lab_2"}
+        state["player"]["resources"]["exotic_gases"] = 49
+        with self.assertRaisesRegex(ActionValidationError, "insufficient exotic_gases"):
+            validate_actions([action], state)
+        state["player"]["resources"]["exotic_gases"] = 75
+        state["player"]["planets"][0]["construction_queue"].update(
+            {"active": True, "safe_to_build": False,
+             "details": {"building": "building_research_lab_2"}}
+        )
+        with self.assertRaisesRegex(ActionValidationError, "already represented"):
+            validate_actions([action], state)
 
     def test_accepts_legal_build_building(self) -> None:
         actions = validate_actions(
@@ -329,3 +458,4 @@ class ActionValidationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

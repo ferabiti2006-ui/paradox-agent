@@ -22,6 +22,7 @@ country={
     owned_planets={ 0 }
     tech_status={
       technology="tech_one" level=1
+      technology="tech_basic_science_lab_2" level=1
       physics_queue={ { technology="tech_p" date="2202.01.01" } }
       society_queue={ }
       engineering_queue={ { technology="tech_e" date="2202.01.01" } }
@@ -47,17 +48,21 @@ planets={ planet={
       paradox_agent_free_district_farming=2
       paradox_agent_free_building_slots=5
       paradox_agent_can_build_building_research_lab_1=1
+      paradox_agent_can_upgrade_building_research_lab_1_to_building_research_lab_2=1
     }
   }
   5={ colony=1 owner=1 name={ key="FOREIGN_PLANET" } }
 } }
 colony={ 0={
-  districts={ 0 } buildings_cache={ 0 } army_build_queue=1
+  districts={ 0 } buildings_cache={ 0 1 } army_build_queue=1
   stability=75 crime=0 num_sapient_pops=4200 amenities=5000 amenities_usage=3000
   total_housing=5000 housing_usage=4200 final_designation="col_capital"
   produces={ energy=8 } upkeep={ energy=3 } profits={ energy=5 }
 } }
-buildings={ 0={ type="building_capital" position=0 } }
+buildings={
+  0={ type="building_capital" position=0 }
+  1={ type="building_research_lab_1" position=0 }
+}
 districts={ 0={ type="district_city" level=2 } }
 fleet={ 0={
   name={ key="TEST_FLEET" } ships={ 0 } ship_class="shipclass_military"
@@ -99,7 +104,13 @@ class SaveParserTests(unittest.TestCase):
         self.assertEqual(player["capital_planet_id"], 4)
         self.assertEqual(player["resources"], {"energy": 100, "minerals": 50})
         self.assertEqual(player["monthly_balance"], {"energy": 8.0, "minerals": -1.0})
-        self.assertEqual(player["research"]["researched"], [{"id": "tech_one", "level": 1}])
+        self.assertEqual(
+            player["research"]["researched"],
+            [
+                {"id": "tech_one", "level": 1},
+                {"id": "tech_basic_science_lab_2", "level": 1},
+            ],
+        )
         self.assertEqual(
             player["research"]["active"],
             {"physics": "tech_p", "society": None, "engineering": "tech_e"},
@@ -130,10 +141,18 @@ class SaveParserTests(unittest.TestCase):
         )
         self.assertEqual(
             player["planets"][0]["building_capacity"],
-            {"used": 1, "available": 5, "maximum": 6, "authoritative": True},
+            {"used": 2, "available": 5, "maximum": 7, "authoritative": True},
         )
         self.assertTrue(
             player["planets"][0]["building_availability"]["building_research_lab_1"]["buildable"]
+        )
+        lab = player["planets"][0]["buildings"][1]
+        self.assertEqual(lab["ui_zone"], "archives")
+        self.assertEqual(lab["possible_upgrades"][0]["target"], "building_research_lab_2")
+        self.assertTrue(lab["possible_upgrades"][0]["upgradeable"])
+        self.assertEqual(
+            lab["possible_upgrades"][0]["cost"],
+            {"minerals": 600, "exotic_gases": 50},
         )
         self.assertFalse(player["planets"][0]["construction_queue"]["safe_to_build"])
         self.assertEqual(
@@ -149,3 +168,4 @@ class SaveParserTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

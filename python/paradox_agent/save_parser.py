@@ -13,6 +13,7 @@ from .planet_catalog import (
     BUILDINGS,
     BUILDING_BASE_COSTS,
     BUILDING_TYPES,
+    BUILDING_UPGRADES_BY_SOURCE,
     DISTRICTS,
     DISTRICT_BASE_COSTS,
     DISTRICT_TYPES,
@@ -383,6 +384,43 @@ def _planet_observations(
                 "definition_file": definition.definition_file,
             }
 
+        # Upgrade legality is attached to the exact save building instance.
+        # ``position`` is only zone-relative in Stellaris 4.4.6, while ``id``
+        # uniquely identifies the structure and is exposed as the planetary
+        # action API's slot.
+        for row in building_rows:
+            source = row.get("type")
+            source_definition = BUILDINGS.get(source) if isinstance(source, str) else None
+            row["ui_zone"] = source_definition.ui_zone if source_definition is not None else None
+            upgrade_options: list[dict[str, Any]] = []
+            for upgrade in BUILDING_UPGRADES_BY_SOURCE.get(source, ()):
+                can_upgrade = _authoritative_integer_variable(
+                    planet,
+                    f"paradox_agent_can_upgrade_{upgrade.source}_to_{upgrade.target}",
+                )
+                cost = dict(upgrade.cost) if supported_cost_version else None
+                authoritative = can_upgrade is not None and cost is not None
+                upgrade_options.append(
+                    {
+                        "source": upgrade.source,
+                        "target": upgrade.target,
+                        "upgradeable": authoritative and can_upgrade == 1,
+                        "authoritative": authoritative,
+                        "cost": cost,
+                        "cost_basis": "installed_definition_manifest_4.4.6"
+                        if cost is not None
+                        else "unsupported_game_version",
+                        "prerequisites": list(upgrade.prerequisites),
+                        "requirements_met": all(
+                            technology in researched_technology_ids
+                            for technology in upgrade.prerequisites
+                        ),
+                        "definition_file": upgrade.definition_file,
+                        "ui_zone": upgrade.ui_zone,
+                    }
+                )
+            row["possible_upgrades"] = upgrade_options
+
         queue_id = planet.get("build_queue")
         planet_queue = _queue_for_planet(construction_queues, queue_id, planet_id)
 
@@ -675,3 +713,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
