@@ -11,7 +11,7 @@ recorded 1920x1080 UI evidence, and available real testbed saves were inspected.
 | Build standard City/Generator/Mining/Agriculture district | Yes | Yes, from testbed availability, capacity, queue, cost model, resources, ownership, date/fingerprint | Yes, OCR-grounded | Yes, exact queue ID | Supported | Done |
 | Build allow-listed normal building | Yes | Yes, from catalog plus per-planet testbed trigger, slots, queue, technology, resources, ownership, date/fingerprint | Yes, unique localized label after non-destructively probing image-grounded compatible slots | Yes, exact queue ID | Supported | Done |
 | Wait without input | Yes | Yes | No input required | N/A | Supported | Done |
-| Upgrade a building | Current structure/slot and definition upgrade edge are readable | Not yet: exact modified upgrade cost and per-planet upgrade legality are not exported | Not calibrated; existing building-slot targeting and upgrade button/dialog are not grounded | Yes, exact slot/type transition should be verifiable | Intentionally unsupported | 1 |
+| Upgrade an allow-listed building | Exact building instance, zone-relative position, source type, target edge, technology, cost, and per-planet legality are save-readable | Yes, for four pinned tier-one to tier-two edges; queue, ownership, affordability, date, and fingerprint are revalidated | Implemented: visually establishes the exact zone/position, rejects an empty slot, confirms the localized current building in Building Details, then uniquely targets Upgrade | Yes, requires the exact save building ID to transition to the target type; a queued order alone is not authoritative completion | Supported in code and automated tests; live legal-upgrade/save transition still needs a save with the new observation flags and target technology | Done; live certification pending |
 | Demolish a building | Exact structure and nominal position are readable | Mostly, but slot identity in 4.4 zone/building data needs stronger correlation | Not calibrated; destructive confirmation is not grounded | Yes, exact removal can be checked | Intentionally unsupported; requires explicit destructive flag | 2 |
 | Demolish a district | Exact type/count is readable | Target type/count known, but an exact UI row and all downstream zone effects are not modeled | Not calibrated | Count reduction is readable, but zone side effects also need verification | Intentionally unsupported; requires explicit destructive flag | 3 |
 | Clear a blocker | Raw deposits exist in saves but are not normalized/classified as blockers | No: exact blocker identity, technology, modified cost, and queue state are not exported | UI control exists but is not calibrated | Likely, after blocker/deposit parsing | Intentionally unsupported | 4 |
@@ -50,6 +50,19 @@ Buildings:
 - `building_foundry_1` — Alloy Foundries
 - `building_factory_1` — Civilian Industries
 - `building_bureaucratic_1` — Administrative Offices
+
+Allow-listed building upgrades:
+
+- `building_research_lab_1` → `building_research_lab_2`
+- `building_holo_theatres` → `building_hyper_entertainment_forum`
+- `building_foundry_1` → `building_foundry_2`
+- `building_factory_1` → `building_factory_2`
+
+The upgrade action's `slot` is the unique building instance ID read from the
+save, not a screen index. The save's zone-relative `position` and cataloged UI
+zone are adapter inputs and are re-grounded against the visible 4.4.6 planet
+panel. Unknown zones, visibly empty positions, mismatched Building Details,
+missing Upgrade controls, and ambiguous OCR all fail closed.
 
 The Python catalog records definition file, category, ordinary non-nomadic
 cost, prerequisites, upgrade edges, and policy role. The observation mod mirrors
@@ -110,6 +123,14 @@ authoritative even after a legal-action snapshot was produced.
 `make_planet_decision` converts the validated request into the existing
 adapter-ready decision envelope without changing or bypassing validation.
 
+`UPGRADE_BUILDING` additionally requires `slot`, `expected_building`, and
+`target_building`. The exact source/target edge must be allow-listed, the slot
+must identify one current building instance of the expected type, the updated
+observation mod must affirm target legality, all target costs and technologies
+must be satisfied, and the shared planet queue must be empty. Post-save
+verification requires that same instance ID to contain the target building;
+visual success or a queue entry is not promoted to authoritative success.
+
 ## Deterministic governor boundary
 
 `DeterministicPlanetGovernor` is a deliberately small interface exercise. It:
@@ -134,3 +155,11 @@ orchestration are not yet implemented as a durable run coordinator. Existing
 real saves predate the new observation variables, so the new catalog entries
 correctly remain unavailable until the updated testbed mod is installed and a
 new monthly observation is saved.
+
+The `2209.03.04` real-save regression was parsed after the upgrade increment.
+It exposed four normalized potential upgrade rows, zero authoritative/legal
+upgrade actions, and a non-empty Alloy Foundries queue. This is the expected
+fail-closed result. A live upgrade click and exact-slot completed-save
+verification are not claimed because that save has neither the new upgrade
+observation variables nor any tier-two prerequisite technology.
+
